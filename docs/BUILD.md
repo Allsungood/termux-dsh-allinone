@@ -91,17 +91,25 @@ cd flutter_app
 flutter pub get
 flutter analyze --no-fatal-infos --no-fatal-warnings
 flutter test
-flutter build apk --release --target-platform android-arm64
+# --split-per-abi, NOT --target-platform (see the warning below)
+flutter build apk --release --split-per-abi
 ```
 
-Output: `flutter_app/build/app/outputs/flutter-apk/app-release.apk`.
+Output: `flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk`,
+`…-x86_64-release.apk` and `…-armeabi-v7a-release.apk`. Only the first two are
+published, as `termux-allinone-arm64.apk` and `termux-allinone-x86_64.apk`.
 
-For a 64-bit x86 device or emulator, repeat with `--target-platform android-x64`.
+> **Never use `--target-platform` for the published APKs.** It builds the Flutter engine for the
+> requested ABI only, but plugin AARs still contribute native libraries for *every* ABI. The resulting
+> APK has a populated `lib/armeabi-v7a/` or `lib/x86_64/` directory with no `libflutter.so`, so
+> Android installs it on a device the engine was not built for and the app crashes at startup instead
+> of being rejected as incompatible. `.github/scripts/verify_apk_abis.py` fails the build if a staged
+> APK contains more than its own ABI, or is missing `libflutter.so` / `libapp.so`.
 
 ### 4. Install it on a device
 
 ```bash
-adb install -r build/app/outputs/flutter-apk/app-release.apk
+adb install -r build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
 ```
 
 Or copy the APK to the device and tap it. First launch goes straight to the setup screen because the
@@ -207,8 +215,8 @@ Steps, in order:
 6. `flutter pub get`
 7. `flutter analyze --no-fatal-infos --no-fatal-warnings`
 8. `flutter test`
-9. `flutter build apk --release --target-platform android-arm64` → staged as `termux-allinone-arm64.apk`
-10. `flutter build apk --release --target-platform android-x64` → staged as `termux-allinone-x86_64.apk`
+9. `flutter build apk --release --split-per-abi` → `app-arm64-v8a-release.apk` staged as `termux-allinone-arm64.apk`, `app-x86_64-release.apk` staged as `termux-allinone-x86_64.apk`
+10. `python3 .github/scripts/verify_apk_abis.py` → asserts each staged APK holds exactly one ABI and both engine libraries
 11. `actions/upload-artifact@v4` — artifact name `termux-allinone-apks`, `if-no-files-found: error`
 12. `softprops/action-gh-release@v2` — only when `github.ref` starts with `refs/tags/v`;
     `generate_release_notes: true`, `fail_on_unmatched_files: true`

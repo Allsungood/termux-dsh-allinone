@@ -65,19 +65,23 @@ jobs:
         working-directory: flutter_app
         run: flutter test
 
-      - name: Build arm64 APK
+      - name: Build per-ABI APKs
         working-directory: flutter_app
-        run: flutter build apk --release --target-platform android-arm64
+        run: |
+          # --split-per-abi, not --target-platform: the latter still packages
+          # plugin AAR native libs for every ABI while the Flutter engine libs
+          # (libflutter.so / libapp.so) only exist for the requested one. The
+          # result installs on a device the engine was not built for and then
+          # crashes on startup. Per-ABI splits filter every library properly.
+          flutter build apk --release --split-per-abi
 
-      - name: Stage arm64 APK
-        run: cp flutter_app/build/app/outputs/flutter-apk/app-release.apk termux-allinone-arm64.apk
+      - name: Stage the supported APKs
+        run: |
+          cp flutter_app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk termux-allinone-arm64.apk
+          cp flutter_app/build/app/outputs/flutter-apk/app-x86_64-release.apk termux-allinone-x86_64.apk
 
-      - name: Build x86_64 APK
-        working-directory: flutter_app
-        run: flutter build apk --release --target-platform android-x64
-
-      - name: Stage x86_64 APK
-        run: cp flutter_app/build/app/outputs/flutter-apk/app-release.apk termux-allinone-x86_64.apk
+      - name: Assert each APK is self-consistent
+        run: python3 .github/scripts/verify_apk_abis.py
 
       - name: Upload APKs
         uses: actions/upload-artifact@v4

@@ -1,7 +1,7 @@
 name: termux_dsh_allinone
 description: One-tap Android launcher for dsh (DeepSeek Harness), OpenClaw, Ollama and a full Linux toolchain, powered by a bundled PRoot runtime.
 publish_to: 'none'
-version: 1.0.2+3
+version: 1.0.3+4
 
 environment:
   sdk: '>=3.5.0 <4.0.0'

@@ -315,10 +315,13 @@ GitHub Actions  (.github/workflows/build.yml — the only workflow)
   │
   ├─ flutter pub get · flutter analyze --no-fatal-infos --no-fatal-warnings · flutter test
   │
-  ├─ flutter build apk --release --target-platform android-arm64
-  │     → termux-allinone-arm64.apk
-  ├─ flutter build apk --release --target-platform android-x64
-  │     → termux-allinone-x86_64.apk
+  ├─ flutter build apk --release --split-per-abi
+  │     → app-arm64-v8a-release.apk → termux-allinone-arm64.apk
+  │     → app-x86_64-release.apk    → termux-allinone-x86_64.apk
+  │     (per-ABI splits, so no APK carries native libs for the wrong ABI)
+  │
+  ├─ python3 .github/scripts/verify_apk_abis.py
+  │     → each staged APK holds exactly one ABI, with libflutter.so + libapp.so
   │
   ├─ actions/upload-artifact@v4 (artifact name: termux-allinone-apks)
   └─ softprops/action-gh-release@v2 — only when the ref is a v* tag
