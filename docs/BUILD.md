@@ -236,9 +236,8 @@ per-architecture asset names in the `DeviceArch` enum in the same file.
 |---|---|---|
 | `RuntimeSources.prootVersion` | `v26.08.25-7266fb3` | `prootBase` → `https://github.com/ahmed-alnassif/proot/releases/download/<version>/` |
 | `DeviceArch.prootAsset` | `proot-aarch64.zip` / `proot-x86_64.zip` | The PRoot download and the extracted `proot` + `loader` |
-| `RuntimeSources.ubuntuVersion` | `24.04.5` | **Currently unused** — the Ubuntu version is baked into `ubuntuBase` (URL path `24.04`) and into the asset filename below |
 | `RuntimeSources.ubuntuBase` | `https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release` | Rootfs download base |
-| `DeviceArch.ubuntuAsset` | `ubuntu-base-24.04.5-base-arm64.tar.gz` / `…-amd64.tar.gz` | Rootfs download and extraction |
+| `DeviceArch.ubuntuAsset` | `ubuntu-base-24.04.5-base-arm64.tar.gz` / `…-amd64.tar.gz` | Rootfs download, extraction, and the `rootfs.source` identity marker |
 | `RuntimeSources.nodeVersion` | `22.11.0` | `nodeBase` → `https://nodejs.org/dist/v<version>/`, the tarball name, the setup log and the `bootstrap.complete` marker |
 | `DeviceArch.nodeDir` | `node-v22.11.0-linux-arm64` / `…-x64` | Node tarball name and the in-guest `tar -xJf` |
 | `RuntimeSources.ollamaVersion` | `v0.34.0` | `ollamaUrl` → `https://github.com/ollama/ollama/releases/download/<version>/` |
@@ -251,8 +250,9 @@ phase 2 of `RuntimeBootstrap.run()`; and the npm packages are `@deepseek-ai/dsh 
 ### How to change a pinned version
 
 1. Edit the constant(s) **and** every place the version string is duplicated — for Ubuntu that means
-   `ubuntuVersion` (cosmetic), `ubuntuBase` (URL) *and* `DeviceArch.ubuntuAsset` (filename); for
-   Node it means `nodeVersion` and `DeviceArch.nodeDir`.
+   `ubuntuBase` (URL) *and* `DeviceArch.ubuntuAsset` (filename); for Node it means `nodeVersion` and
+   `DeviceArch.nodeDir`; PRoot and Ollama take their version from `prootVersion` / `ollamaVersion`
+   and the cache name is stamped automatically by `cachedProot()` / `cachedOllama()`.
 2. Confirm the asset actually exists with the new name (the downloader throws
    `HTTP <code> while fetching <url>` on anything that is not 200).
 3. Update the download table in [README.md](../README.md) and
@@ -262,20 +262,22 @@ phase 2 of `RuntimeBootstrap.run()`; and the npm packages are `@deepseek-ai/dsh 
 ### Cached-archive gotchas (read before you ship a bump)
 
 The installer only downloads when the destination file is **absent**, and it never deletes the
-archives afterwards. Combined with the idempotency checks, that means some bumps do not reach an
-existing install:
+archives afterwards. Each artifact is cached under a name that embeds its pinned version, so a
+version bump is a cache miss and therefore does reach an existing install:
 
-| Bumped | Download filename | Reaches an existing install? |
+| Bumped | Cached as | Reaches an existing install? |
 |---|---|---|
-| `nodeVersion` | version is in the filename | Yes — new filename → re-download, and Node is re-extracted on every setup run. |
-| `ubuntuVersion` | version is in the filename | **No.** The tarball is re-downloaded under the new name, but extraction is skipped while `rootfs/etc/os-release` exists. Requires clearing app data or deleting the rootfs. |
-| `prootVersion` | **not** in the filename (`proot-<arch>.zip`) | **No.** The cached zip is reused, so the old PRoot stays. Delete `downloads/proot-<arch>.zip` or clear app data. |
-| `ollamaVersion` | **not** in the filename (`ollama-linux-<arch>.tar.zst`) | **No**, for the same reason — the cached `.tar.zst` is reused. |
+| `nodeVersion` | `node-v<version>-linux-<arch>.tar.xz` | Yes — new filename → re-download, and Node is re-extracted on every setup run. |
+| `DeviceArch.ubuntuAsset` | `ubuntu-base-<version>-base-<arch>.tar.gz` | Yes — the new tarball is downloaded **and** unpacked, because the identity in `rootfs.source` no longer matches. |
+| `prootVersion` | `<prootVersion>-proot-<arch>.zip` (via `cachedProot()`) | Yes — the version is part of the local filename, so the stale zip is not reused. |
+| `ollamaVersion` | `<ollamaVersion>-ollama-linux-<arch>.tar.zst` (via `cachedOllama()`) | Yes — same reason. |
 
-Practical rule: when you bump `prootVersion` or `ollamaVersion`, change the *local* filename pattern
-in `DeviceArch` as well (for example `proot-aarch64-v26.08.25.zip`), or accept that testers must clear
-app data. The full clean-install path for a user is always the same: Android app settings → Clear
-data, then relaunch to get the first-run screen again.
+`cachedProot()` / `cachedOllama()` exist precisely because upstream names those two archives
+*without* a version; caching them under the upstream name would silently keep the old binary.
+
+Old archives are never pruned, so `downloads/` grows by roughly the size of each superseded
+release and the ~1.5 GB Ollama tarball stays behind after installation. Clearing the app's data is
+what actually reclaims the space.
 
 ---
 

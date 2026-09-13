@@ -79,6 +79,17 @@ class RuntimeSources {
   static String ollamaUrl(DeviceArch arch) =>
       'https://github.com/ollama/ollama/releases/download/$ollamaVersion/'
       '${arch.ollamaAsset}';
+
+  /// Local cache filenames.
+  ///
+  /// Upstream names the PRoot and Ollama archives without a version
+  /// (`proot-aarch64.zip`, `ollama-linux-arm64.tar.zst`), so caching under the
+  /// upstream name would make a pinned-version bump silently reuse the stale
+  /// file. Prefixing the version keeps the cache honest.
+  static String cachedProot(DeviceArch arch) =>
+      '$prootVersion-${arch.prootAsset}';
+  static String cachedOllama(DeviceArch arch) =>
+      '$ollamaVersion-${arch.ollamaAsset}';
 }
 
 /// Location of the self-contained Linux runtime inside the app sandbox.
@@ -320,7 +331,9 @@ class RuntimeBootstrap {
 
     // --- 1. PRoot + loader -------------------------------------------------
     _phase(0, 0.0, 'Fetching PRoot');
-    final prootZip = File('${paths.downloads.path}/${arch.prootAsset}');
+    final prootZip = File(
+      '${paths.downloads.path}/${RuntimeSources.cachedProot(arch)}',
+    );
     if (!await prootZip.exists()) {
       await _downloader.fetch(
         RuntimeSources.prootUrl(arch),
@@ -339,8 +352,15 @@ class RuntimeBootstrap {
     _phase(0, 1.0, 'PRoot ready');
 
     // --- 2. Ubuntu root filesystem ----------------------------------------
-    final rootfsMarker = File('${paths.rootfs.path}/etc/os-release');
-    if (!await rootfsMarker.exists()) {
+    // The rootfs is only re-extracted when the archive it came from changes.
+    // Keying on `/etc/os-release` alone would silently keep an old release
+    // after a version bump; the source marker records what was unpacked.
+    final sourceMarker = File('${paths.base.path}/rootfs.source');
+    final unpackedFrom = await sourceMarker.exists()
+        ? (await sourceMarker.readAsString()).trim()
+        : '';
+    final osRelease = File('${paths.rootfs.path}/etc/os-release');
+    if (unpackedFrom != arch.ubuntuAsset || !await osRelease.exists()) {
       final tarball = File('${paths.downloads.path}/${arch.ubuntuAsset}');
       if (!await tarball.exists()) {
         await _downloader.fetch(
@@ -352,6 +372,7 @@ class RuntimeBootstrap {
       _phase(1, 0.9, 'Extracting Ubuntu base');
       onLog('Extracting Ubuntu root filesystem (this can take a minute)...');
       await proot.extractTarGz(tarball, paths.rootfs);
+      await sourceMarker.writeAsString('${arch.ubuntuAsset}\n');
     }
     onLog('Ubuntu root filesystem ready');
     _phase(1, 1.0, 'Root filesystem ready');
@@ -478,7 +499,8 @@ class RuntimeBootstrap {
     final paths = await RuntimePaths.resolve();
     final arch = await DeviceArch.detect();
     final proot = ProotRuntime(paths);
-    final tarball = File('${paths.downloads.path}/${arch.ollamaAsset}');
+    final localName = RuntimeSources.cachedOllama(arch);
+    final tarball = File('${paths.downloads.path}/$localName');
 
     onLog(
       'Downloading Ollama ${RuntimeSources.ollamaVersion} '
@@ -496,7 +518,7 @@ class RuntimeBootstrap {
     final code = await proot.stream(
       'apt-get install -y -qq --no-install-recommends zstd '
       '&& mkdir -p /usr/local '
-      '&& tar --zstd -xf /host-downloads/${arch.ollamaAsset} -C /usr/local '
+      '&& tar --zstd -xf /host-downloads/$localName -C /usr/local '
       '&& chmod 755 /usr/local/bin/ollama '
       '&& /usr/local/bin/ollama --version',
       log: onLog,
