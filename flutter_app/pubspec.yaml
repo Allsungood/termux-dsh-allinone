@@ -1,1 +1,25 @@
-name: termux_dsh_allinonedescription: One-tap Android launcher for dsh (DeepSeek Harness), OpenClaw, Ollama and a full Linux toolchain, powered by a bundled PRoot runtime.publish_to: 'none'version: 1.0.4+5environment:  sdk: '>=3.5.0 <4.0.0'dependencies:  flutter:    sdk: flutter  cupertino_icons: ^1.0.8  shared_preferences: ^2.3.2  path_provider: ^2.1.4  webview_flutter: ^4.8.0  url_launcher: ^6.3.1  archive: ^4.2.0dev_dependencies:  flutter_test:    sdk: flutter  flutter_lints: ^4.0.0flutter:  uses-material-design: true
+name: termux_dsh_allinone
+description: One-tap Android launcher for dsh (DeepSeek Harness), OpenClaw, Ollama and a full Linux toolchain, powered by a bundled PRoot runtime.
+publish_to: 'none'
+version: 1.0.4+5
+
+environment:
+  sdk: '>=3.5.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  shared_preferences: ^2.3.2
+  path_provider: ^2.1.4
+  webview_flutter: ^4.8.0
+  url_launcher: ^6.3.1
+  archive: ^4.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
