@@ -83,8 +83,8 @@ class ToolCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               running
-                  ? 'running'
-                  : (installed ? 'installed' : (tool.optional ? 'not installed' : 'missing')),
+                  ? '运行中'
+                  : (installed ? '已安装' : (tool.optional ? '未安装' : '缺失')),
               style: theme.textTheme.labelSmall?.copyWith(color: accent),
             ),
             const Spacer(),
@@ -94,7 +94,7 @@ class ToolCard extends StatelessWidget {
                 child: OutlinedButton.icon(
                   onPressed: onInstall,
                   icon: const Icon(Icons.download, size: 16),
-                  label: const Text('Install'),
+                  label: const Text('安装'),
                 ),
               ),
             ] else if (installed && tool.startCommand != null) ...[
@@ -103,7 +103,7 @@ class ToolCard extends StatelessWidget {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: running ? onStop : onStart,
-                      child: Text(running ? 'Stop' : 'Start'),
+                      child: Text(running ? '停止' : '启动'),
                     ),
                   ),
                   if (tool.dashboardUrl != null) ...[
@@ -111,7 +111,7 @@ class ToolCard extends StatelessWidget {
                     Expanded(
                       child: FilledButton(
                         onPressed: onOpen,
-                        child: const Text('Open'),
+                        child: const Text('打开'),
                       ),
                     ),
                   ],
@@ -122,7 +122,7 @@ class ToolCard extends StatelessWidget {
                 width: double.infinity,
                 child: OutlinedButton(
                   onPressed: null,
-                  child: Text(installed ? 'Ready' : 'Unavailable'),
+                  child: Text(installed ? '可用' : '不可用'),
                 ),
               ),
           ],

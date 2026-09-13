@@ -50,7 +50,7 @@ class _ConsoleViewState extends State<ConsoleView> {
     try {
       await _terminal.start();
     } catch (error) {
-      _append('Could not start the shell: $error');
+      _append('无法启动终端：$error');
     }
     if (mounted) setState(() => _booting = false);
   }
@@ -181,7 +181,7 @@ class _ConsoleViewState extends State<ConsoleView> {
                     decoration: const InputDecoration(
                       isDense: true,
                       border: InputBorder.none,
-                      hintText: 'Type a command',
+                      hintText: '输入命令',
                     ),
                   ),
                 ),

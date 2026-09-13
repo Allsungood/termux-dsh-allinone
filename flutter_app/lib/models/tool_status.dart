@@ -56,7 +56,7 @@ class ToolStatus {
     ToolStatus(
       id: 'dsh',
       name: 'dsh',
-      description: 'DeepSeek Harness — AI coding agent with a web UI',
+      description: 'DeepSeek Harness —— 带 Web 界面的 AI 编程助手',
       icon: Icons.terminal,
       dashboardUrl: 'http://127.0.0.1:${config.dshPort}',
       startCommand:
@@ -65,7 +65,7 @@ class ToolStatus {
     ToolStatus(
       id: 'openclaw',
       name: 'OpenClaw',
-      description: 'AI gateway with device capabilities',
+      description: '具备设备能力的 AI 网关',
       icon: Icons.hub,
       dashboardUrl: 'http://127.0.0.1:${config.openclawPort}',
       startCommand: 'openclaw gateway --port ${config.openclawPort}',
@@ -73,7 +73,7 @@ class ToolStatus {
     ToolStatus(
       id: 'ollama',
       name: 'Ollama',
-      description: 'Local LLM inference (~1.5 GB download)',
+      description: '本地大模型推理（约 1.5 GB 下载）',
       icon: Icons.memory,
       optional: true,
       dashboardUrl: 'http://127.0.0.1:${config.ollamaPort}',
@@ -83,19 +83,19 @@ class ToolStatus {
     const ToolStatus(
       id: 'node',
       name: 'Node.js',
-      description: 'JavaScript runtime (v22 LTS)',
+      description: 'JavaScript 运行时（v22 LTS）',
       icon: Icons.javascript,
     ),
     const ToolStatus(
       id: 'git',
       name: 'Git',
-      description: 'Distributed version control',
+      description: '分布式版本控制',
       icon: Icons.commit,
     ),
     const ToolStatus(
       id: 'python3',
       name: 'Python 3',
-      description: 'Scripting and build tooling',
+      description: '脚本与构建工具链',
       icon: Icons.code,
     ),
   ];

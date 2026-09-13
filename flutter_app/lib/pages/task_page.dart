@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/runtime.dart';
 
-/// Signature of a long running job that reports progress and log lines.
-typedef TaskBody =
-    Future<void> Function(LogFn onLog, ProgressFn onProgress);
+/// 一个需要长时间运行的任务：显示进度和实时日志。
+typedef TaskBody = Future<void> Function(LogFn onLog, ProgressFn onProgress);
 
-/// Generic "run this job and show me what it is doing" screen.
+/// 通用的“执行任务并显示过程”页面。
 ///
-/// Used for optional installs (Ollama) and for re-running the toolchain
-/// install, so the user always sees real output instead of a spinner.
+/// 用于可选的 Ollama 安装和修复安装，让用户始终看到真实输出而不是一个转圈。
 class TaskPage extends StatefulWidget {
   const TaskPage({
     super.key,
     required this.title,
     required this.body,
     this.description,
-    this.successMessage = 'Done',
+    this.successMessage = '已完成',
   });
 
   final String title;
@@ -33,7 +32,7 @@ class _TaskPageState extends State<TaskPage> {
   final ScrollController _scroll = ScrollController();
 
   double _progress = 0;
-  String _label = 'Starting';
+  String _label = '正在开始…';
   bool _running = true;
   bool _done = false;
   String? _error;
@@ -60,6 +59,14 @@ class _TaskPageState extends State<TaskPage> {
     });
   }
 
+  Future<void> _copyLogs() async {
+    final messenger = ScaffoldMessenger.of(context);
+    await Clipboard.setData(ClipboardData(text: _logs.join('\n')));
+    messenger.showSnackBar(
+      const SnackBar(content: Text('日志已复制，可直接粘贴反馈')),
+    );
+  }
+
   Future<void> _run() async {
     setState(() {
       _running = true;
@@ -67,7 +74,7 @@ class _TaskPageState extends State<TaskPage> {
       _error = null;
       _logs.clear();
       _progress = 0;
-      _label = 'Starting';
+      _label = '正在开始…';
     });
     try {
       await widget.body(
@@ -92,9 +99,9 @@ class _TaskPageState extends State<TaskPage> {
       setState(() {
         _running = false;
         _error = error.toString();
-        _label = 'Failed';
+        _label = '失败';
       });
-      _append('ERROR: $error');
+      _append('错误：$error');
     }
   }
 
@@ -103,7 +110,17 @@ class _TaskPageState extends State<TaskPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          if (_logs.isNotEmpty)
+            IconButton(
+              tooltip: '复制日志',
+              icon: const Icon(Icons.copy_all),
+              onPressed: _copyLogs,
+            ),
+        ],
+      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -133,12 +150,12 @@ class _TaskPageState extends State<TaskPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
                     color: const Color(0xFF11131A),
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   padding: const EdgeInsets.all(12),
                   child: ListView.builder(
@@ -146,15 +163,17 @@ class _TaskPageState extends State<TaskPage> {
                     itemCount: _logs.length,
                     itemBuilder: (context, index) {
                       final line = _logs[index];
-                      final isError =
-                          line.startsWith('ERROR') || line.startsWith('WARNING');
+                      final isProblem =
+                          line.startsWith('错误') ||
+                          line.startsWith('警告') ||
+                          line.startsWith('注意：');
                       return SelectableText(
                         line,
                         style: TextStyle(
                           fontFamily: 'monospace',
                           fontSize: 11.5,
                           height: 1.45,
-                          color: isError
+                          color: isProblem
                               ? const Color(0xFFFF8A80)
                               : const Color(0xFF9BE39B),
                         ),
@@ -163,12 +182,12 @@ class _TaskPageState extends State<TaskPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               if (_done)
                 FilledButton.icon(
                   onPressed: () => Navigator.of(context).pop(true),
                   icon: const Icon(Icons.check),
-                  label: const Text('Close'),
+                  label: const Text('关闭'),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(48),
                   ),
@@ -177,7 +196,7 @@ class _TaskPageState extends State<TaskPage> {
                 FilledButton.icon(
                   onPressed: _run,
                   icon: const Icon(Icons.refresh),
-                  label: const Text('Retry'),
+                  label: const Text('重试'),
                   style: FilledButton.styleFrom(
                     minimumSize: const Size.fromHeight(48),
                   ),

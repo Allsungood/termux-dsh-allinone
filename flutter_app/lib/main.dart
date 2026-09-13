@@ -29,7 +29,7 @@ class TermuxAllInOneApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Termux All-in-One',
+      title: 'Termux 一体化',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: _seed),

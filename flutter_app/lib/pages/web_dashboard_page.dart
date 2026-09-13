@@ -75,12 +75,12 @@ class _WebDashboardPageState extends State<WebDashboardPage> {
         title: Text(widget.title),
         actions: [
           IconButton(
-            tooltip: 'Reload',
+            tooltip: '重新加载',
             icon: const Icon(Icons.refresh),
             onPressed: () => _controller.reload(),
           ),
           IconButton(
-            tooltip: 'Open in browser',
+            tooltip: '用浏览器打开',
             icon: const Icon(Icons.open_in_new),
             onPressed: _openExternally,
           ),
@@ -108,13 +108,13 @@ class _WebDashboardPageState extends State<WebDashboardPage> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          'Cannot reach ${widget.url}',
+                          '无法连接 ${widget.url}',
                           style: theme.textTheme.titleMedium,
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Start the service from the Tools tab, then reload.\n'
+                          '请先在「工具」标签页启动该服务，然后重新加载。\n'
                           '$_error',
                           style: theme.textTheme.bodySmall,
                           textAlign: TextAlign.center,
@@ -126,7 +126,7 @@ class _WebDashboardPageState extends State<WebDashboardPage> {
                             _controller.reload();
                           },
                           icon: const Icon(Icons.refresh),
-                          label: const Text('Try again'),
+                          label: const Text('重试'),
                         ),
                       ],
                     ),

@@ -64,11 +64,11 @@ class _DashboardViewState extends State<DashboardView> {
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => TaskPage(
-          title: 'Install Ollama',
+          title: '安装 Ollama',
           description:
-              'Ollama ships as a ~1.5 GB archive. Keep the screen on and stay '
-              'on Wi-Fi — this takes a while.',
-          successMessage: 'Ollama installed',
+              'Ollama 压缩包约 1.5 GB。请保持屏幕常亮并连接 '
+              'Wi-Fi —— 这一过程需要一些时间。',
+          successMessage: 'Ollama 已安装',
           body: (onLog, onProgress) => _environment.installOllama(
             onLog: onLog,
             onProgress: onProgress,
@@ -95,13 +95,13 @@ class _DashboardViewState extends State<DashboardView> {
         children: [
           StatusCard(
             icon: Icons.developer_board,
-            title: 'Linux runtime',
-            subtitle: '$installed of ${_tools.length} tools ready inside the app sandbox',
+            title: 'Linux 运行环境',
+            subtitle: '$installed / ${_tools.length} 个工具已就绪（App 沙箱内）',
             accent: installed == _tools.length ? Colors.green : null,
           ),
           const SizedBox(height: 16),
           Text(
-            'Tools',
+            '工具',
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.bold,
             ),
@@ -147,7 +147,7 @@ class _DashboardViewState extends State<DashboardView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Quick commands',
+                    '常用命令',
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
@@ -162,7 +162,7 @@ class _DashboardViewState extends State<DashboardView> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Run these in the Console tab.',
+                    '请到「终端」标签页执行。',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

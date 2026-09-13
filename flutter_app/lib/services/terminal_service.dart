@@ -29,7 +29,7 @@ class TerminalService {
 
     final paths = await RuntimePaths.resolve();
     if (!await paths.proot.exists()) {
-      _output.add('Runtime is not installed yet. Run setup first.\n');
+      _output.add('运行环境尚未安装，请先完成安装。\n');
       return;
     }
 
@@ -55,7 +55,7 @@ class TerminalService {
     forward(process.stderr);
     unawaited(
       process.exitCode.then((code) {
-        _output.add('\n[shell exited with code $code]\n');
+        _output.add('\n[终端已退出，退出码 $code]\n');
         _process = null;
       }),
     );

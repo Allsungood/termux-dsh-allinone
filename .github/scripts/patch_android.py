@@ -27,7 +27,7 @@ import pathlib
 import re
 import sys
 
-APP_LABEL = "Termux All-in-One"
+APP_LABEL = "AI 开发环境"
 MIN_SDK = "24"
 TARGET_SDK = "28"
 

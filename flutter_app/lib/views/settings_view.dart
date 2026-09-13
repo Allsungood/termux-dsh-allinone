@@ -62,11 +62,11 @@ class _SettingsViewState extends State<SettingsView> {
     final ollamaPort = _parsePort(_ollamaPort.text);
 
     if (dshPort == null || openclawPort == null || ollamaPort == null) {
-      setState(() => _validationError = 'Ports must be numbers between 1 and 65535.');
+      setState(() => _validationError = '端口必须是 1 到 65535 之间的数字。');
       return;
     }
     if (_ollamaModel.text.trim().isEmpty) {
-      setState(() => _validationError = 'Model name cannot be empty.');
+      setState(() => _validationError = '模型名称不能为空。');
       return;
     }
 
@@ -82,7 +82,7 @@ class _SettingsViewState extends State<SettingsView> {
     );
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Settings saved')),
+      const SnackBar(content: Text('设置已保存')),
     );
   }
 
@@ -90,11 +90,11 @@ class _SettingsViewState extends State<SettingsView> {
     await Navigator.of(context).push<bool>(
       MaterialPageRoute<bool>(
         builder: (_) => TaskPage(
-          title: 'Repair environment',
+          title: '修复运行环境',
           description:
-              'Re-runs the installer. Already downloaded archives are reused, '
-              'so this is quick on a device that has been set up before.',
-          successMessage: 'Environment is up to date',
+              '将重新运行安装程序。已下载的压缩包会被直接复用，'
+              '因此在之前安装过的设备上速度很快。',
+          successMessage: '运行环境已是最新',
           body: (onLog, onProgress) => _environment.runSetup(
             onLog: onLog,
             onProgress: onProgress,
@@ -116,41 +116,41 @@ class _SettingsViewState extends State<SettingsView> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
       children: [
         Text(
-          'Services',
+          '服务',
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
           ),
         ),
         const SizedBox(height: 12),
         _portField(
-          label: 'dsh web UI port',
+          label: 'dsh Web 界面端口',
           controller: _dshPort,
-          helper: 'Default 3080',
+          helper: '默认 3080',
         ),
         _portField(
-          label: 'OpenClaw gateway port',
+          label: 'OpenClaw 网关端口',
           controller: _openclawPort,
-          helper: 'Default 18789',
+          helper: '默认 18789',
         ),
         _portField(
-          label: 'Ollama port',
+          label: 'Ollama 端口',
           controller: _ollamaPort,
-          helper: 'Default 11434',
+          helper: '默认 11434',
         ),
         TextField(
           controller: _ollamaModel,
           decoration: const InputDecoration(
-            labelText: 'Default Ollama model',
-            helperText: 'e.g. llama3.2:1b',
+            labelText: '默认 Ollama 模型',
+            helperText: '例如 llama3.2:1b',
             border: OutlineInputBorder(),
           ),
         ),
         const SizedBox(height: 8),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
-          title: const Text('Keep services awake'),
+          title: const Text('保持服务常驻运行'),
           subtitle: const Text(
-            'Foreground services survive Android background limits',
+            '前台服务可避免被安卓系统回收',
           ),
           value: _keepAwake,
           onChanged: (value) => setState(() => _keepAwake = value),
@@ -168,14 +168,14 @@ class _SettingsViewState extends State<SettingsView> {
         FilledButton.icon(
           onPressed: _save,
           icon: const Icon(Icons.save),
-          label: const Text('Save settings'),
+          label: const Text('保存设置'),
           style: FilledButton.styleFrom(
             minimumSize: const Size.fromHeight(48),
           ),
         ),
         const SizedBox(height: 28),
         Text(
-          'Maintenance',
+          '维护',
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
           ),
@@ -184,23 +184,23 @@ class _SettingsViewState extends State<SettingsView> {
         OutlinedButton.icon(
           onPressed: _rerunSetup,
           icon: const Icon(Icons.build),
-          label: const Text('Repair / re-run installation'),
+          label: const Text('修复 / 重新安装'),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size.fromHeight(48),
           ),
         ),
         const SizedBox(height: 28),
         Text(
-          'About',
+          '关于',
           style: theme.textTheme.titleMedium?.copyWith(
             fontWeight: FontWeight.bold,
           ),
         ),
         const SizedBox(height: 8),
         Text(
-          'Everything runs inside this app\'s private storage using PRoot. '
-          'No root is required and no separate Termux installation is needed. '
-          'The guest is an Ubuntu 24.04 root filesystem with Node.js 22 LTS.',
+          '所有内容都通过 PRoot 在本应用的私有存储中运行，无需 root 权限，'
+          '也无需另外安装 Termux。客户机是一个 Ubuntu 24.04 根文件系统，'
+          '内置 Node.js 22 LTS。',
           style: theme.textTheme.bodySmall?.copyWith(
             color: theme.colorScheme.onSurfaceVariant,
           ),

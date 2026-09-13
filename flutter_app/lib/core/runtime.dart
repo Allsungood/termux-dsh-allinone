@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'rootfs_extractor.dart';
+import 'tar_reader.dart';
+
 /// Progress callback: (0.0-1.0, human readable label)
 typedef ProgressFn = void Function(double value, String label);
 
@@ -136,7 +139,9 @@ class Downloader {
       request.followRedirects = true;
       final response = await request.close();
       if (response.statusCode != HttpStatus.ok) {
-        throw HttpException('HTTP ${response.statusCode} while fetching $url');
+        throw HttpException(
+          '下载失败：HTTP ${response.statusCode}（$url）',
+        );
       }
       final total = response.contentLength;
       final sink = destination.openWrite();
@@ -260,28 +265,9 @@ class ProotRuntime {
     }
   }
 
-  /// Extract a `.tar.gz` using the platform `tar`, which preserves symlinks
-  /// (essential: an Ubuntu base rootfs is full of `/bin -> usr/bin` links).
-  Future<void> extractTarGz(File tarball, Directory destination) async {
-    await destination.create(recursive: true);
-    final result = await Process.run('tar', [
-      '-xzf',
-      tarball.path,
-      '-C',
-      destination.path,
-    ]);
-    if (result.exitCode != 0) {
-      throw ProcessException(
-        'tar',
-        ['-xzf', tarball.path],
-        result.stderr.toString(),
-        result.exitCode,
-      );
-    }
-  }
-
   /// Extract a `.zip` in pure Dart. Only used for the PRoot archive, which
-  /// contains three regular files and no symlinks.
+  /// contains three regular files (`proot`, `loader`, `loader-m32`) and no
+  /// symlinks.
   Future<void> extractZip(File archiveFile, Directory destination) async {
     final archive = ZipDecoder().decodeBytes(await archiveFile.readAsBytes());
     for (final entry in archive) {
@@ -321,16 +307,15 @@ class RuntimeBootstrap {
     final arch = await DeviceArch.detect();
     if (arch == DeviceArch.unsupported) {
       throw const FormatException(
-        'Unsupported CPU architecture: only arm64 and x86_64 devices are '
-        'supported.',
+        '不支持的 CPU 架构：本应用只能在 arm64（aarch64）或 x86_64 设备上运行。',
       );
     }
-    onLog('Device architecture: ${arch.name}');
+    onLog('检测到设备架构：${arch.name}');
 
     final proot = ProotRuntime(paths);
 
     // --- 1. PRoot + loader -------------------------------------------------
-    _phase(0, 0.0, 'Fetching PRoot');
+    _phase(0, 0.0, '正在获取 PRoot 运行器');
     final prootZip = File(
       '${paths.downloads.path}/${RuntimeSources.cachedProot(arch)}',
     );
@@ -338,18 +323,18 @@ class RuntimeBootstrap {
       await _downloader.fetch(
         RuntimeSources.prootUrl(arch),
         prootZip,
-        (f, l) => _phase(0, f * 0.8, 'Fetching PRoot ($l)'),
+        (f, l) => _phase(0, f * 0.8, '正在下载 PRoot（$l）'),
       );
     }
-    _phase(0, 0.85, 'Extracting PRoot');
+    _phase(0, 0.85, '正在解压 PRoot');
     await proot.extractZip(prootZip, paths.base);
     await proot.chmod(paths.proot, '700');
     await proot.chmod(paths.loader, '700');
     if (!await paths.proot.exists()) {
-      throw const FileSystemException('PRoot binary missing after extraction');
+      throw const FileSystemException('解压后找不到 PRoot 可执行文件，安装包可能已损坏。');
     }
-    onLog('PRoot ready: ${paths.proot.path}');
-    _phase(0, 1.0, 'PRoot ready');
+    onLog('PRoot 就绪：${paths.proot.path}');
+    _phase(0, 1.0, 'PRoot 就绪');
 
     // --- 2. Ubuntu root filesystem ----------------------------------------
     // The rootfs is only re-extracted when the archive it came from changes.
@@ -366,21 +351,31 @@ class RuntimeBootstrap {
         await _downloader.fetch(
           RuntimeSources.ubuntuUrl(arch),
           tarball,
-          (f, l) => _phase(1, f * 0.85, 'Downloading Ubuntu base ($l)'),
+          (f, l) => _phase(1, f * 0.85, '正在下载 Ubuntu 基础系统（$l）'),
         );
       }
-      _phase(1, 0.9, 'Extracting Ubuntu base');
-      onLog('Extracting Ubuntu root filesystem (this can take a minute)...');
-      await proot.extractTarGz(tarball, paths.rootfs);
+      _phase(1, 0.9, '正在解压 Ubuntu 根文件系统');
+      onLog('正在解压 Ubuntu 根文件系统（约 3400 个条目，需要一到两分钟）…');
+      // Extracted by RootfsExtractor, not the platform `tar`: toybox tar runs as
+      // the app's unprivileged uid and aborts when it cannot chown every member
+      // back to root:root. See the class comment for the full reasoning.
+      final report = await RootfsExtractor.extract(
+        tarball: tarball,
+        destination: paths.rootfs,
+        onLog: onLog,
+        onProgress: (fraction) =>
+            _phase(1, 0.9 + fraction * 0.08, '正在解压 Ubuntu 根文件系统'),
+      );
+      onLog('解压完成：$report');
       await sourceMarker.writeAsString('${arch.ubuntuAsset}\n');
     }
-    onLog('Ubuntu root filesystem ready');
-    _phase(1, 1.0, 'Root filesystem ready');
+    onLog('Ubuntu 根文件系统就绪');
+    _phase(1, 1.0, '根文件系统就绪');
 
     // --- 3. Base packages -------------------------------------------------
     await _writeRootfsConfig(paths);
-    _phase(2, 0.05, 'Configuring package sources');
-    onLog('Installing base packages (git, python3, curl, ...)');
+    _phase(2, 0.05, '正在配置软件源');
+    onLog('正在安装基础工具（git、python3、curl 等，首次较慢）…');
     final aptCode = await proot.stream(
       'apt-get update -qq && '
       'apt-get install -y -qq --no-install-recommends '
@@ -392,23 +387,24 @@ class RuntimeBootstrap {
       throw ProcessException(
         'apt-get',
         const ['install'],
-        'base package installation failed with exit code $aptCode',
+        '基础工具安装失败（退出码 $aptCode）。请检查网络后重试；'
+            '若持续失败，可在“终端”里手动执行 apt-get update 查看详细报错。',
         aptCode,
       );
     }
-    _phase(2, 1.0, 'Base packages installed');
+    _phase(2, 1.0, '基础工具安装完成');
 
     // --- 4. Node.js -------------------------------------------------------
-    _phase(3, 0.1, 'Installing Node.js ${RuntimeSources.nodeVersion}');
+    _phase(3, 0.1, '正在安装 Node.js ${RuntimeSources.nodeVersion}');
     final nodeTarball = File('${paths.downloads.path}/${arch.nodeDir}.tar.xz');
     if (!await nodeTarball.exists()) {
       await _downloader.fetch(
         RuntimeSources.nodeUrl(arch),
         nodeTarball,
-        (f, l) => _phase(3, 0.1 + f * 0.5, 'Downloading Node.js ($l)'),
+        (f, l) => _phase(3, 0.1 + f * 0.5, '正在下载 Node.js（$l）'),
       );
     }
-    _phase(3, 0.7, 'Unpacking Node.js');
+    _phase(3, 0.7, '正在解压 Node.js');
     final nodeCode = await proot.stream(
       'tar -xJf /host-downloads/${arch.nodeDir}.tar.xz '
       '-C /usr/local --strip-components=1',
@@ -418,17 +414,17 @@ class RuntimeBootstrap {
       throw ProcessException(
         'tar',
         const ['-xJf'],
-        'Node.js extraction failed with exit code $nodeCode',
+        'Node.js 解压失败（退出码 $nodeCode）。',
         nodeCode,
       );
     }
     final nodeVersion = await proot.run(const ['/usr/local/bin/node', '--version']);
-    onLog('Node.js installed: ${nodeVersion.stdout.toString().trim()}');
-    _phase(3, 1.0, 'Node.js ready');
+    onLog('Node.js 安装完成：${nodeVersion.stdout.toString().trim()}');
+    _phase(3, 1.0, 'Node.js 就绪');
 
     // --- 5. dsh + OpenClaw ------------------------------------------------
-    _phase(4, 0.1, 'Installing dsh and OpenClaw (npm)');
-    onLog('Installing dsh (DeepSeek Harness) and OpenClaw via npm...');
+    _phase(4, 0.1, '正在安装 dsh 与 OpenClaw');
+    onLog('正在通过 npm 安装 dsh（DeepSeek Harness）与 OpenClaw…');
     final npmCode = await proot.stream(
       '/usr/local/bin/npm install -g --no-fund --no-audit '
       '@deepseek-ai/dsh openclaw',
@@ -436,26 +432,31 @@ class RuntimeBootstrap {
     );
     if (npmCode != 0) {
       // Not fatal: the toolchain itself is usable, and the user can retry from
-      // the terminal once they see the npm error.
+      // the console once they see the npm error.
       onLog(
-        'WARNING: npm global install exited with code $npmCode. '
-        'Retry later with: npm install -g @deepseek-ai/dsh openclaw',
+        '警告：npm 全局安装失败（退出码 $npmCode）。系统本身仍然可用，'
+        '可稍后在“终端”里手动重试：npm install -g @deepseek-ai/dsh openclaw',
       );
     }
     await _writeDshConfig(proot);
-    _phase(4, 1.0, 'AI tools installed');
+    _phase(4, 1.0, 'AI 工具安装完成');
 
     // --- 6. Finalise ------------------------------------------------------
-    _phase(5, 0.5, 'Finalising');
-    final check = await proot.run(const ['/bin/sh', '-c', 'node --version; git --version']);
-    onLog(check.stdout.toString().trim());
+    _phase(5, 0.5, '正在做最后检查');
+    final check = await proot.run(const [
+      '/bin/sh',
+      '-c',
+      'node --version; git --version; python3 --version',
+    ]);
+    final summary = check.stdout.toString().trim();
+    if (summary.isNotEmpty) onLog(summary);
     await paths.marker.writeAsString(
       'bootstrapped ${DateTime.now().toIso8601String()}\n'
       'arch=${arch.name}\n'
       'node=${RuntimeSources.nodeVersion}\n',
     );
-    _phase(5, 1.0, 'Setup complete');
-    onLog('Setup complete.');
+    _phase(5, 1.0, '安装完成');
+    onLog('安装完成，可以开始使用了。');
   }
 
   Future<void> _writeRootfsConfig(RuntimePaths paths) async {
@@ -487,7 +488,7 @@ class RuntimeBootstrap {
           "'{\"approvalPolicy\":\"never\",\"webPort\":3080}' "
           '> /root/.dsh/config.json',
     ]);
-    onLog('dsh approval policy set to "never"');
+    onLog('已将 dsh 的授权策略设为 never（不再逐条询问）');
   }
 
   /// Optional: Ollama ships as a ~1.5 GB `.tar.zst`, so it is never part of the
@@ -503,18 +504,18 @@ class RuntimeBootstrap {
     final tarball = File('${paths.downloads.path}/$localName');
 
     onLog(
-      'Downloading Ollama ${RuntimeSources.ollamaVersion} '
-      '(~1.5 GB, this takes a while)...',
+      '正在下载 Ollama ${RuntimeSources.ollamaVersion}'
+      '（约 1.5 GB，请保持联网并耐心等待）…',
     );
     if (!await tarball.exists()) {
       await _downloader.fetch(
         RuntimeSources.ollamaUrl(arch),
         tarball,
-        (f, l) => onProgress(f, 'Ollama: $l'),
+        (f, l) => onProgress(f, '正在下载 Ollama：$l'),
       );
     }
 
-    onLog('Installing zstd and unpacking Ollama inside the root filesystem...');
+    onLog('正在安装 zstd 并在系统内解压 Ollama…');
     final code = await proot.stream(
       'apt-get install -y -qq --no-install-recommends zstd '
       '&& mkdir -p /usr/local '
@@ -528,10 +529,10 @@ class RuntimeBootstrap {
       throw ProcessException(
         'ollama',
         const ['--version'],
-        'Ollama installation failed with exit code $code',
+        'Ollama 安装失败（退出码 $code）。可能是下载不完整或存储空间不足。',
         code,
       );
     }
-    onLog('Ollama installed. Pull a model with: ollama pull llama3.2:1b');
+    onLog('Ollama 安装完成。下载模型：ollama pull llama3.2:1b');
   }
 }
