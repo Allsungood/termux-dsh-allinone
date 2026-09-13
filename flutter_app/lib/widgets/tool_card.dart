@@ -1,110 +1,152 @@
 import 'package:flutter/material.dart';
-import '../models/process_info.dart';
 
+import '../models/tool_status.dart';
+
+/// One tool on the dashboard: state plus the actions that make sense for it.
 class ToolCard extends StatelessWidget {
-  final ProcessInfo process;
-  final VoidCallback onTap;
+  const ToolCard({
+    super.key,
+    required this.tool,
+    required this.running,
+    this.onOpen,
+    this.onStart,
+    this.onStop,
+    this.onInstall,
+  });
 
-  const ToolCard({super.key, required this.process, required this.onTap});
+  final ToolStatus tool;
+  final bool running;
+  final VoidCallback? onOpen;
+  final VoidCallback? onStart;
+  final VoidCallback? onStop;
+  final VoidCallback? onInstall;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
+    final scheme = theme.colorScheme;
+    final installed = tool.installed;
+
+    final Color accent;
+    if (running) {
+      accent = Colors.green;
+    } else if (installed) {
+      accent = scheme.primary;
+    } else {
+      accent = scheme.outline;
+    }
 
     return Card(
       elevation: 0,
+      margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: colorScheme.outline.withOpacity(0.12)),
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: scheme.outlineVariant),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: process.isRunning
-                        ? Colors.green.withOpacity(0.15)
-                        : colorScheme.primaryContainer,
-                    child: Icon(
-                      Icons.play_arrow,
-                      color: process.isRunning ? Colors.green : colorScheme.primary,
-                      size: 28,
-                    ),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accent.withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          process.displayName,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          process.description,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurface.withOpacity(0.6),
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                  child: Icon(tool.icon, size: 20, color: accent),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    tool.name,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                     ),
-                  ),
-                  // Status indicator
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: process.isRunning ? Colors.green : Colors.grey.shade400,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Version and details
-              if (process.version != null)
-                Text(
-                  process.version!,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontFamily: 'monospace',
-                    color: colorScheme.primary,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-              const SizedBox(height: 8),
-              // Action button
+                _StateDot(color: accent, filled: installed),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              tool.description,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              running
+                  ? 'running'
+                  : (installed ? 'installed' : (tool.optional ? 'not installed' : 'missing')),
+              style: theme.textTheme.labelSmall?.copyWith(color: accent),
+            ),
+            const Spacer(),
+            if (!installed && tool.optional) ...[
               SizedBox(
                 width: double.infinity,
-                height: 36,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                  ),
-                  onPressed: onTap,
-                  child: Text(
-                    process.isRunning ? 'Open Dashboard' : 'Start',
-                    style: theme.textTheme.labelMedium,
-                  ),
+                child: OutlinedButton.icon(
+                  onPressed: onInstall,
+                  icon: const Icon(Icons.download, size: 16),
+                  label: const Text('Install'),
                 ),
               ),
-            ],
-          ),
+            ] else if (installed && tool.startCommand != null) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: running ? onStop : onStart,
+                      child: Text(running ? 'Stop' : 'Start'),
+                    ),
+                  ),
+                  if (tool.dashboardUrl != null) ...[
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: onOpen,
+                        child: const Text('Open'),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ] else
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: null,
+                  child: Text(installed ? 'Ready' : 'Unavailable'),
+                ),
+              ),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+class _StateDot extends StatelessWidget {
+  const _StateDot({required this.color, required this.filled});
+
+  final Color color;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 10,
+      height: 10,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: filled ? color : Colors.transparent,
+        border: Border.all(color: color, width: 1.5),
       ),
     );
   }

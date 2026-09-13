@@ -1,40 +1,49 @@
 import 'package:flutter/material.dart';
-import 'package:termux_dsh_allinone/pages/home_page.dart';
-import 'package:termux_dsh_allinone/pages/setup_page.dart';
-import 'package:termux_dsh_allinone/services/environment_service.dart';
 
-void main() async {
+import 'pages/home_page.dart';
+import 'pages/setup_page.dart';
+import 'services/environment_service.dart';
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Check if environment is set up before launching the app
-  final envService = EnvironmentService();
-  final isSetupComplete = await envService.isSetupComplete();
+  final environment = EnvironmentService();
+  var ready = false;
+  try {
+    await environment.load();
+    ready = await environment.isBootstrapped();
+  } catch (_) {
+    ready = false;
+  }
 
-  runApp(MyApp(isSetupComplete: isSetupComplete));
+  runApp(TermuxAllInOneApp(showSetup: !ready));
 }
 
-class MyApp extends StatelessWidget {
-  final bool isSetupComplete;
+class TermuxAllInOneApp extends StatelessWidget {
+  const TermuxAllInOneApp({super.key, required this.showSetup});
 
-  const MyApp({super.key, required this.isSetupComplete});
+  final bool showSetup;
+
+  static const Color _seed = Color(0xFF4F46E5);
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Termux All-in-One',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: _seed),
         useMaterial3: true,
-        brightness: Brightness.light,
       ),
       darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: _seed,
+          brightness: Brightness.dark,
+        ),
         useMaterial3: true,
-        brightness: Brightness.dark,
       ),
       themeMode: ThemeMode.system,
-      debugShowCheckedModeBanner: false,
-      home: isSetupComplete ? const HomePage() : const SetupPage(),
+      home: showSetup ? const SetupPage() : const HomePage(),
     );
   }
 }

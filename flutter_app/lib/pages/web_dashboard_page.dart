@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-import '../services/web_view_service.dart';
 
+/// In-app browser for the local dashboards served by dsh and OpenClaw.
 class WebDashboardPage extends StatefulWidget {
-  final String url;
-  final String title;
-
   const WebDashboardPage({
     super.key,
     required this.url,
     required this.title,
   });
+
+  final String url;
+  final String title;
 
   @override
   State<WebDashboardPage> createState() => _WebDashboardPageState();
@@ -18,120 +19,123 @@ class WebDashboardPage extends StatefulWidget {
 
 class _WebDashboardPageState extends State<WebDashboardPage> {
   late final WebViewController _controller;
-  bool _isLoading = true;
+  bool _loading = true;
+  String? _error;
   String _currentUrl = '';
 
   @override
   void initState() {
     super.initState();
+    _currentUrl = widget.url;
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      ..setBackgroundColor(const Color(0x00000000))
       ..setNavigationDelegate(
         NavigationDelegate(
-          onProgress: (int progress) {
-            // Update loading progress
-          },
-          onPageStarted: (String url) {
+          onPageStarted: (url) {
+            if (!mounted) return;
             setState(() {
-              _isLoading = true;
+              _loading = true;
+              _error = null;
               _currentUrl = url;
             });
           },
-          onPageFinished: (String url) {
+          onPageFinished: (url) {
+            if (!mounted) return;
             setState(() {
-              _isLoading = false;
+              _loading = false;
               _currentUrl = url;
             });
           },
-          onWebResourceError: (WebResourceError error) {
-            // Handle error
-          },
-          onNavigationRequest: (NavigationRequest request) {
-            // Allow navigation to http/https URLs
-            if (request.url.startsWith('http://') ||
-                request.url.startsWith('https://')) {
-              return NavigationDecision.navigate;
-            }
-            // For other schemes (like intent), allow them
-            return NavigationDecision.navigate;
+          onWebResourceError: (error) {
+            if (error.isForMainFrame == false) return;
+            if (!mounted) return;
+            setState(() {
+              _loading = false;
+              _error = '${error.description} (code ${error.errorCode})';
+            });
           },
         ),
       )
       ..loadRequest(Uri.parse(widget.url));
   }
 
+  Future<void> _openExternally() async {
+    final uri = Uri.parse(_currentUrl.isEmpty ? widget.url : _currentUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
         actions: [
           IconButton(
+            tooltip: 'Reload',
             icon: const Icon(Icons.refresh),
-            onPressed: () {
-              _controller.reload();
-            },
+            onPressed: () => _controller.reload(),
           ),
           IconButton(
-            icon: const Icon(Icons.open_in_browser),
-            onPressed: () async {
-              // Open in external browser
-              await launchUrl(Uri.parse(_currentUrl));
-            },
-          ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              switch (value) {
-                case 'zoom_in':
-                  _controller.setZoomLevel(_controller.value.zoomLevel + 0.25);
-                  break;
-                case 'zoom_out':
-                  _controller.setZoomLevel(_controller.value.zoomLevel - 0.25);
-                  break;
-                case 'reset_zoom':
-                  _controller.setZoomLevel(1.0);
-                  break;
-              }
-            },
-            itemBuilder: (BuildContext context) => [
-              const PopupMenuItem(
-                value: 'zoom_in',
-                child: Text('放大'),
-              ),
-              const PopupMenuItem(
-                value: 'zoom_out',
-                child: Text('缩小'),
-              ),
-              const PopupMenuItem(
-                value: 'reset_zoom',
-                child: Text('重置缩放'),
-              ),
-            ],
+            tooltip: 'Open in browser',
+            icon: const Icon(Icons.open_in_new),
+            onPressed: _openExternally,
           ),
         ],
       ),
       body: Stack(
         children: [
           WebViewWidget(controller: _controller),
-          if (_isLoading)
-            Container(
-              color: Colors.black54,
-              child: const Center(
-                child: CircularProgressIndicator(),
+          if (_loading)
+            const LinearProgressIndicator(minHeight: 2),
+          if (_error != null)
+            Positioned.fill(
+              child: ColoredBox(
+                color: theme.colorScheme.surface,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.cloud_off,
+                          size: 44,
+                          color: theme.colorScheme.error,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Cannot reach ${widget.url}',
+                          style: theme.textTheme.titleMedium,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Start the service from the Tools tab, then reload.\n'
+                          '$_error',
+                          style: theme.textTheme.bodySmall,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        FilledButton.icon(
+                          onPressed: () {
+                            setState(() => _error = null);
+                            _controller.reload();
+                          },
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Try again'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
         ],
       ),
-      floatingActionButton: _isLoading
-          ? null
-          : FloatingActionButton(
-              onPressed: () {
-                _controller.goBackOrForward(0); // Go to top
-              },
-              child: const Icon(Icons.arrow_upward),
-              mini: true,
-            ),
     );
   }
 }

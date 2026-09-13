@@ -1,103 +1,75 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/services.dart';
 
+import '../core/runtime.dart';
+
+/// Bridges a long-lived guest shell to the on-screen console.
+///
+/// The shell is a plain pipe rather than a PTY: full-screen curses programs are
+/// not supported, but every ordinary command (and therefore the documented
+/// setup steps) works.
 class TerminalService {
+  TerminalService._();
+
+  static final TerminalService instance = TerminalService._();
+
+  factory TerminalService() => instance;
+
   Process? _process;
-  StreamSubscription<String>? _outputSubscription;
-  final _outputController = StreamController<String>.broadcast();
-  final _errorController = StreamController<String>.broadcast();
+  final StreamController<String> _output =
+      StreamController<String>.broadcast();
 
-  Stream<String> get output => _outputController.stream;
-  Stream<String> get error => _errorController.stream;
+  Stream<String> get output => _output.stream;
 
-  bool get isRunning => _process != null && _process!.isAlive;
+  bool get isRunning => _process != null;
 
-  // Start a shell process in Termux environment
-  Future<bool> startShell() async {
-    try {
-      // Termux-specific shell invocation
-      final shell = Platform.environment['SHELL'] ?? '/system/bin/sh';
+  Future<void> start() async {
+    if (_process != null) return;
 
-      _process = await Process.start(
-        shell,
-        ['-l'],
-        runInShell: true,
-        environment: Map<String, String>.from(Platform.environment),
-      );
+    final paths = await RuntimePaths.resolve();
+    if (!await paths.proot.exists()) {
+      _output.add('Runtime is not installed yet. Run setup first.\n');
+      return;
+    }
 
-      _outputSubscription = _process!.stdout
+    final proot = ProotRuntime(paths);
+    final process = await Process.start(
+      paths.proot.path,
+      proot.guestArgs(const ['/bin/sh']),
+      environment: proot.environment,
+      includeParentEnvironment: false,
+    );
+    _process = process;
+
+    void forward(Stream<List<int>> stream) {
+      stream
           .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen((line) {
-        _outputController.add(line);
-      }, onDone: () {
-        _outputController.close();
-      }, onError: (error) {
-        _errorController.add(error.toString());
-      });
-
-      _process!.stderr
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen((line) {
-        _errorController.add(line);
-      });
-
-      return true;
-    } catch (e) {
-      return false;
+          .listen(
+            _output.add,
+            onError: (Object error) => _output.add('\n$error\n'),
+          );
     }
+
+    forward(process.stdout);
+    forward(process.stderr);
+    unawaited(
+      process.exitCode.then((code) {
+        _output.add('\n[shell exited with code $code]\n');
+        _process = null;
+      }),
+    );
   }
 
-  // Send command to the shell
-  Future<void> sendCommand(String command) async {
-    if (_process != null && _process!.isAlive) {
-      _process!.stdin.writeln(command);
-    }
+  void send(String command) {
+    final process = _process;
+    if (process == null) return;
+    process.stdin.writeln(command);
   }
 
-  // Run a command and return its output
-  Future<String> runCommand(String command, {Duration timeout = const Duration(seconds: 30)}) async {
-    try {
-      final result = await Process.run(
-        command.split(' ')[0],
-        command.split(' ').skip(1).toList(),
-        runInShell: true,
-        timeout: timeout,
-      );
-      return result.stdout.toString();
-    } catch (e) {
-      return 'Error: $e';
-    }
-  }
-
-  // Get shell history (last N commands)
-  Future<List<String>> getHistory({int limit = 50}) async {
-    final historyPath = '${Platform.environment['HOME']}/.bash_history';
-    try {
-      final file = File(historyPath);
-      if (await file.exists()) {
-        final lines = await file.readAsLines();
-        return lines.takeLast(limit).toList();
-      }
-    } catch (e) {
-      // Ignore
-    }
-    return [];
-  }
-
-  // Execute an interactive command (like `su` or `proot-distro login`)
-  Future<Process> startInteractiveProcess(String command) async {
-    return Process.start(command, [], runInShell: true);
-  }
-
-  // Cleanup
-  void dispose() {
-    _outputSubscription?.cancel();
-    _process?.kill();
+  Future<void> stop() async {
+    final process = _process;
     _process = null;
-    _outputController.close();
-    _errorController.close();
+    process?.kill(ProcessSignal.sigterm);
   }
 }

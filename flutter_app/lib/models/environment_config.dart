@@ -1,60 +1,65 @@
+import 'dart:convert';
+
+/// User-tunable settings, persisted as JSON in SharedPreferences.
 class EnvironmentConfig {
-  // dsh configuration
-  final String dshWebPort;
-  final String dshApprovalPolicy;
-  final bool dshAutoStart;
-
-  // OpenClaw configuration
-  final int openclawPort;
-  final String openclawModel;
-
-  // Ollama configuration
-  final String ollamaPort;
-  final String ollamaModelsPath;
-
-  // General settings
-  final bool autoStartAtBoot;
-  final bool disableBatteryOptimization;
-  final bool requestPermissionsOnStartup;
-
-  EnvironmentConfig({
-    this.dshWebPort = '3080',
-    this.dshApprovalPolicy = 'never',
-    this.dshAutoStart = true,
+  const EnvironmentConfig({
+    this.dshPort = 3080,
     this.openclawPort = 18789,
-    this.openclawModel = 'llama3.2:1b',
-    this.ollamaPort = '11434',
-    this.ollamaModelsPath = '',
-    this.autoStartAtBoot = true,
-    this.disableBatteryOptimization = true,
-    this.requestPermissionsOnStartup = true,
+    this.ollamaPort = 11434,
+    this.ollamaModel = 'llama3.2:1b',
+    this.keepAwake = true,
   });
 
+  final int dshPort;
+  final int openclawPort;
+  final int ollamaPort;
+  final String ollamaModel;
+  final bool keepAwake;
+
+  EnvironmentConfig copyWith({
+    int? dshPort,
+    int? openclawPort,
+    int? ollamaPort,
+    String? ollamaModel,
+    bool? keepAwake,
+  }) {
+    return EnvironmentConfig(
+      dshPort: dshPort ?? this.dshPort,
+      openclawPort: openclawPort ?? this.openclawPort,
+      ollamaPort: ollamaPort ?? this.ollamaPort,
+      ollamaModel: ollamaModel ?? this.ollamaModel,
+      keepAwake: keepAwake ?? this.keepAwake,
+    );
+  }
+
   Map<String, dynamic> toJson() => {
-    'dshWebPort': dshWebPort,
-    'dshApprovalPolicy': dshApprovalPolicy,
-    'dshAutoStart': dshAutoStart,
+    'dshPort': dshPort,
     'openclawPort': openclawPort,
-    'openclawModel': openclawModel,
     'ollamaPort': ollamaPort,
-    'ollamaModelsPath': ollamaModelsPath,
-    'autoStartAtBoot': autoStartAtBoot,
-    'disableBatteryOptimization': disableBatteryOptimization,
-    'requestPermissionsOnStartup': requestPermissionsOnStartup,
+    'ollamaModel': ollamaModel,
+    'keepAwake': keepAwake,
   };
 
-  factory EnvironmentConfig.fromJson(Map<String, dynamic> json) {
+  static EnvironmentConfig fromJson(Map<String, dynamic> json) {
     return EnvironmentConfig(
-      dshWebPort: json['dshWebPort'] as String? ?? '3080',
-      dshApprovalPolicy: json['dshApprovalPolicy'] as String? ?? 'never',
-      dshAutoStart: json['dshAutoStart'] as bool? ?? true,
-      openclawPort: json['openclawPort'] as int? ?? 18789,
-      openclawModel: json['openclawModel'] as String? ?? 'llama3.2:1b',
-      ollamaPort: json['ollamaPort'] as String? ?? '11434',
-      ollamaModelsPath: json['ollamaModelsPath'] as String? ?? '',
-      autoStartAtBoot: json['autoStartAtBoot'] as bool? ?? true,
-      disableBatteryOptimization: json['disableBatteryOptimization'] as bool? ?? true,
-      requestPermissionsOnStartup: json['requestPermissionsOnStartup'] as bool? ?? true,
+      dshPort: (json['dshPort'] as num?)?.toInt() ?? 3080,
+      openclawPort: (json['openclawPort'] as num?)?.toInt() ?? 18789,
+      ollamaPort: (json['ollamaPort'] as num?)?.toInt() ?? 11434,
+      ollamaModel: json['ollamaModel'] as String? ?? 'llama3.2:1b',
+      keepAwake: json['keepAwake'] as bool? ?? true,
     );
+  }
+
+  String encode() => jsonEncode(toJson());
+
+  static EnvironmentConfig decode(String? raw) {
+    if (raw == null || raw.isEmpty) return const EnvironmentConfig();
+    try {
+      return EnvironmentConfig.fromJson(
+        jsonDecode(raw) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      return const EnvironmentConfig();
+    }
   }
 }

@@ -1,7 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import '../services/environment_service.dart';
 
+import '../services/environment_service.dart';
+import 'home_page.dart';
+
+/// First-run screen: installs the PRoot runtime and the Linux toolchain.
 class SetupPage extends StatefulWidget {
   const SetupPage({super.key});
 
@@ -9,316 +11,99 @@ class SetupPage extends StatefulWidget {
   State<SetupPage> createState() => _SetupPageState();
 }
 
-class _SetupPageState extends State<SetupPage> with SingleTickerProviderStateMixin {
-  final EnvironmentService _envService = EnvironmentService();
-  final List<String> _logs = [];
-  double _progress = 0.0;
-  String _currentStep = '正在准备...';
-  bool _isRunning = false;
-  bool _isCompleted = false;
-  late AnimationController _animationController;
-  late Animation<double> _pulseAnimation;
+class _SetupPageState extends State<SetupPage> {
+  final EnvironmentService _environment = EnvironmentService();
+  final List<String> _logs = <String>[];
+  final ScrollController _scroll = ScrollController();
 
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(seconds: 1),
-      vsync: this,
-    )..repeat(reverse: true);
-    
-    _pulseAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-  }
+  double _progress = 0;
+  String _label = 'Ready when you are';
+  bool _running = false;
+  bool _done = false;
+  String? _error;
 
   @override
   void dispose() {
-    _animationController.dispose();
+    _scroll.dispose();
     super.dispose();
   }
 
-  void _addLog(String message) {
-    setState(() {
-      _logs.add('[${DateTime.now().toString().substring(11, 19)}] $message');
-      if (_logs.length > 200) {
-        _logs.removeAt(0);
+  void _append(String line) {
+    if (!mounted) return;
+    setState(() => _logs.add(line));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.jumpTo(_scroll.position.maxScrollExtent);
       }
     });
   }
 
-  void _updateProgress(double progress, String step) {
+  Future<void> _start() async {
     setState(() {
-      _progress = progress.clamp(0.0, 1.0);
-      _currentStep = step;
-    });
-  }
-
-  Future<void> _startSetup() async {
-    if (_isRunning) return;
-    
-    setState(() {
-      _isRunning = true;
-      _progress = 0.0;
+      _running = true;
+      _done = false;
+      _error = null;
       _logs.clear();
+      _progress = 0;
+      _label = 'Starting';
     });
 
-    final success = await _envService.runSetupScript(
-      onProgress: (output) {
-        for (final line in output.split('\n')) {
-          if (line.trim().isNotEmpty) {
-            _addLog(line.trim());
-          }
-        }
-      },
-      autoYes: true,
+    try {
+      await _environment.runSetup(
+        onLog: _append,
+        onProgress: (value, label) {
+          if (!mounted) return;
+          setState(() {
+            _progress = value;
+            _label = label;
+          });
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _running = false;
+        _done = true;
+        _progress = 1;
+        _label = 'Setup complete';
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _running = false;
+        _error = error.toString();
+        _label = 'Setup failed';
+      });
+      _append('ERROR: $error');
+    }
+  }
+
+  void _enterApp() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(builder: (_) => const HomePage()),
     );
-
-    setState(() {
-      _isRunning = false;
-      _isCompleted = success;
-      if (success) {
-        _progress = 1.0;
-        _currentStep = '设置完成！';
-      } else {
-        _currentStep = '设置失败，请查看日志';
-      }
-    });
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final colorScheme = theme.colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Termux All-in-One'),
-        centerTitle: true,
-        elevation: 0,
-      ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Header
-              AnimatedScale(
-                scale: _isRunning ? 1.0 : _pulseAnimation.value,
-                duration: const Duration(milliseconds: 500),
-                child: Container(
-                  padding: const EdgeInsets.all(32),
-                  decoration: BoxDecoration(
-                    color: _isRunning 
-                        ? colorScheme.primaryContainer 
-                        : colorScheme.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        _isCompleted ? Icons.check_circle : Icons.terminal,
-                        size: 64,
-                        color: _isCompleted 
-                            ? Colors.green 
-                            : colorScheme.primary,
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        _isCompleted 
-                            ? '环境已就绪'
-                            : (_isRunning ? '正在配置环境...' : '欢迎使用'),
-                        style: theme.textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        _currentStep,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: colorScheme.onSurface.withOpacity(0.7),
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Progress bar
-              if (_isRunning || _isCompleted)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    LinearProgressIndicator(
-                      value: _progress,
-                      minHeight: 8,
-                      borderRadius: BorderRadius.circular(4),
-                      backgroundColor: colorScheme.surfaceContainerHighest,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                        _isCompleted ? Colors.green : colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${(_progress * 100).toInt()}%',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurface.withOpacity(0.6),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-
-              const SizedBox(height: 24),
-
-              // Action button
-              if (!_isRunning && !_isCompleted)
-                ElevatedButton.icon(
-                  onPressed: _startSetup,
-                  icon: const Icon(Icons.rocket_launch),
-                  label: const Text('开始一键设置'),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    textStyle: const TextStyle(fontSize: 18),
-                    backgroundColor: colorScheme.primary,
-                    foregroundColor: colorScheme.onPrimary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                )
-              else if (_isCompleted)
-                Column(
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (_) => const HomePage()),
-                        );
-                      },
-                      icon: const Icon(Icons.arrow_forward),
-                      label: const Text('进入主界面'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        textStyle: const TextStyle(fontSize: 18),
-                        minimumSize: const Size(double.infinity, 56),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _isCompleted = false;
-                          _progress = 0.0;
-                        });
-                      },
-                      child: const Text('重新设置'),
-                    ),
-                  ],
-                ),
-
-              const SizedBox(height: 24),
-
-              // Log area
-              if (_isRunning || _logs.isNotEmpty)
-                Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.list_alt, size: 20),
-                              const SizedBox(width: 8),
-                              Text(
-                                '设置日志',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const Spacer(),
-                              if (_logs.isNotEmpty)
-                                TextButton.icon(
-                                  onPressed: () {
-                                    setState(() {
-                                      _logs.clear();
-                                    });
-                                  },
-                                  icon: const Icon(Icons.clear),
-                                  label: const Text('清空'),
-                                ),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 16),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.black87,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: ListView.builder(
-                              itemCount: _logs.length,
-                              reverse: true,
-                              itemBuilder: (context, index) {
-                                final log = _logs[_logs.length - 1 - index];
-                                final isError = log.contains('❌') || log.contains('Error') || log.contains('FAILED');
-                                return SelectableText(
-                                  log,
-                                  style: TextStyle(
-                                    color: isError ? Colors.red.shade300 : Colors.green.shade300,
-                                    fontFamily: 'monospace',
-                                    fontSize: 11,
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                      ],
-                    ),
-                  ),
-                ),
-
-              // Info text
-              if (!_isRunning && !_isCompleted)
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: colorScheme.primaryContainer.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '将会自动配置：',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      _buildFeatureItem('🔧 Node.js 24 LTS', '运行时环境'),
-                      _buildFeatureItem('🤖 dsh (DeepSeek Harness)', 'AI 编码助手 + Web UI'),
-                      _buildFeatureItem('🦞 OpenClaw', 'AI 网关 + 设备能力'),
-                      _buildFeatureItem('🦙 Ollama', '本地大模型推理 CLI'),
-                      _buildFeatureItem('📦 Git, Python, SSH', '开发工具链'),
-                    ],
-                  ),
-                ),
+              _header(theme),
+              const SizedBox(height: 16),
+              if (_running || _done || _error != null) _progressBlock(theme),
+              if (_logs.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Expanded(child: _logConsole(theme)),
+              ] else
+                const Spacer(),
+              const SizedBox(height: 16),
+              _actions(),
             ],
           ),
         ),
@@ -326,14 +111,178 @@ class _SetupPageState extends State<SetupPage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildFeatureItem(String title, String subtitle) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+  Widget _header(ThemeData theme) {
+    return Card(
+      elevation: 0,
+      color: theme.colorScheme.surfaceContainerHighest,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _done ? Icons.check_circle : Icons.rocket_launch,
+                  size: 36,
+                  color: _done ? Colors.green : theme.colorScheme.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    _done ? 'Environment ready' : 'Set up your Linux environment',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _done
+                  ? 'dsh, OpenClaw and the toolchain are installed inside the app sandbox.'
+                  : 'This installs a self-contained Linux runtime inside the app — '
+                        'no root, no separate Termux install. First run downloads '
+                        'about 55 MB.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: const [
+                _Chip(icon: Icons.terminal, label: 'dsh'),
+                _Chip(icon: Icons.hub, label: 'OpenClaw'),
+                _Chip(icon: Icons.javascript, label: 'Node.js 22'),
+                _Chip(icon: Icons.commit, label: 'Git'),
+                _Chip(icon: Icons.code, label: 'Python 3'),
+                _Chip(icon: Icons.memory, label: 'Ollama (optional)'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _progressBlock(ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(_label, style: theme.textTheme.bodyMedium),
+            ),
+            Text('${(_progress * 100).round()}%'),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: LinearProgressIndicator(
+            value: _progress,
+            minHeight: 8,
+            valueColor: AlwaysStoppedAnimation<Color>(
+              _error != null ? theme.colorScheme.error : theme.colorScheme.primary,
+            ),
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(
+            _error!,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.error,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _logConsole(ThemeData theme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF11131A),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: ListView.builder(
+        controller: _scroll,
+        itemCount: _logs.length,
+        itemBuilder: (context, index) {
+          final line = _logs[index];
+          final isError = line.startsWith('ERROR') || line.startsWith('WARNING');
+          return SelectableText(
+            line,
+            style: TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 11.5,
+              height: 1.45,
+              color: isError
+                  ? const Color(0xFFFF8A80)
+                  : const Color(0xFF9BE39B),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _actions() {
+    if (_done) {
+      return FilledButton.icon(
+        onPressed: _enterApp,
+        icon: const Icon(Icons.arrow_forward),
+        label: const Text('Open dashboard'),
+        style: FilledButton.styleFrom(
+          minimumSize: const Size.fromHeight(52),
+        ),
+      );
+    }
+    return FilledButton.icon(
+      onPressed: _running ? null : _start,
+      icon: _running
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.download),
+      label: Text(
+        _running
+            ? 'Installing…'
+            : (_error == null ? 'Install environment' : 'Retry installation'),
+      ),
+      style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(52)),
+    );
+  }
+}
+
+class _Chip extends StatelessWidget {
+  const _Chip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(999),
+      ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
-          const SizedBox(width: 12),
-          Text(subtitle, style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6))),
+          Icon(icon, size: 14),
+          const SizedBox(width: 6),
+          Text(label, style: theme.textTheme.labelMedium),
         ],
       ),
     );
