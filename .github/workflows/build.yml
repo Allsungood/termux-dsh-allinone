@@ -1,0 +1,200 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: '3.24.3'
+  JAVA_VERSION: '17'
+
+jobs:
+  build-android:
+    name: Build Android APK & AAB
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Install Dependencies
+        run: |
+          cd flutter_app
+          flutter pub get
+
+      - name: Build APK
+        run: |
+          cd flutter_app
+          flutter build apk --release --target-platform android-arm64
+
+      - name: Build AAB (Play Store)
+        run: |
+          cd flutter_app
+          flutter build appbundle --release
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: flutter_app/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Upload AAB Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-aab
+          path: flutter_app/build/app/outputs/bundle/release/app-release.aab
+
+      - name: Create Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            flutter_app/build/app/outputs/flutter-apk/app-release.apk
+            flutter_app/build/app/outputs/bundle/release/app-release.aab
+          generate_release_notes: true
+
+  build-bootstrap:
+    name: Build Custom Termux Bootstrap
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        arch: [aarch64, arm, x86_64]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install proot
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y proot zip unzip
+
+      - name: Build Bootstrap (${{ matrix.arch }})
+        run: |
+          cd bootstrap/scripts
+          ARCH=${{ matrix.arch }} bash make-bootstrap.sh
+
+      - name: Upload Bootstrap Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrap-${{ matrix.arch }}
+          path: bootstrap/out/bootstrap-${{ matrix.arch }}.zip
+
+      - name: Release Bootstrap (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            bootstrap/out/bootstrap-${{ matrix.arch }}.zip
+          generate_release_notes: true
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+
+      - name: Install Dependencies
+        run: |
+          cd flutter_app
+          flutter pub get
+
+      - name: Analyze
+        run: |
+          cd flutter_app
+          flutter analyze
+
+      - name: Run Unit Tests
+        run: |
+          cd flutter_app
+          flutter test
+
+      - name: Format Check
+        run: |
+          cd flutter_app
+          dart format --output=none --set-exit-if-changed lib/
+
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+      - name: Check Format
+        run: |
+          cd flutter_app
+          dart format --output=none --set-exit-if-changed lib/
+      - name: Analyze
+        run: |
+          cd flutter_app
+          flutter analyze
+
+  release:
+    name: Create GitHub Release
+    needs: [build-android, build-bootstrap]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-apk
+          path: ./release/
+
+      - name: Download AAB
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release-aab
+          path: ./release/
+
+      - name: Download Bootstraps
+        uses: actions/download-artifact@v4
+        with:
+          pattern: bootstrap-*
+          path: ./release/
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ./release/app-release.apk
+            ./release/app-release.aab
+            ./release/bootstrap-aarch64.zip
+            ./release/bootstrap-arm.zip
+            ./release/bootstrap-x86_64.zip
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

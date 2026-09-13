@@ -1,0 +1,58 @@
+name: termux_dsh_allinone
+description: A Flutter app that provides one-click access to dsh, openclaw, and ollama on Android with integrated Termux environment.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  # State management
+  provider: ^6.1.2
+  # UI Enhancements
+  flutter_svg: ^2.0.9
+  shimmer: ^3.0.0
+  # Async utilities
+  flutter_riverpod: ^2.4.9
+  # Platform integration
+  package_info_plus: ^4.2.0
+  url_launcher: ^6.2.4
+  # Process management
+  flutter_background_service: ^3.2.1
+  # Logging
+  logger: ^2.0.2+1
+  # Shared preferences
+  shared_preferences: ^2.2.3
+  # Path handling
+  path_provider: ^2.1.3
+  # Permission handling
+  permission_handler: ^11.3.1
+  # WebView for dashboard
+  webview_flutter: ^4.7.0
+  # Terminal emulator
+  pty_process: ^1.0.0
+  # Local storage for configs
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  # JSON serialization
+  json_annotation: ^4.9.0
+  build_runner: ^2.4.8
+  # Dependency injection
+  get_it: ^7.7.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  hive_generator: ^2.0.1
+  json_serializable: ^6.8.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/icons/
+    - assets/images/
+    - assets/lottie/

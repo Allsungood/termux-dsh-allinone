@@ -1,0 +1,52 @@
+# ==============================================================================
+# Custom Termux Bootstrap Package List
+# ------------------------------------------------------------------------------
+# Packages listed here are pre-installed into the Termux environment via the
+# built-in package manager (apk-style apt under Termux). Each package runs its
+# post-install scripts so that binaries like Node.js, git, and python3 are fully
+# functional immediately after bootstrapping.
+#
+# Format:
+#   <package-name>          # install latest version
+#   <package-name>:<version>  # pin a specific version
+#   # <comment>              # a comment line (ignored)
+# ==============================================================================
+
+# --- Core runtime ---
+# Node.js LTS (v24.x) — required by dsh and openclaw.
+nodejs-lts
+
+# Python 3 — needed by node-gyp for native module rebuilds; dsh may need it at runtime.
+python3
+
+# OpenSSL + CA certificates (needed for HTTPS downloads by npm/pip within the sandbox).
+openssl
+ca-certificates
+
+# --- Version control ---
+git
+
+# --- Shell & core utilities ---
+# bash is the login shell; many scripts assume it.
+bash
+# Modern search / navigation tools.
+ripgrep
+fd
+jq
+
+# --- Network tools ---
+curl
+wget
+
+# --- SSH client ---
+openssh
+
+# --- Optional: build tools (only ~5MB, useful for native module fixes) ---
+# make and clang allow rebuilding native addons like node-pty or fs-ext if a
+# future dsh version requires an ABI not covered by our prebuilt binaries.
+make
+clang
+
+# --- Terminal goodies ---
+# termux-tools is the package that provides termux-open, termux-open-url, etc.
+termux-tools
