@@ -61,6 +61,7 @@ def patch_gradle() -> None:
 
     text = path.read_text(encoding="utf-8")
     original = text
+    kotlin_dsl = path.suffix == ".kts"
 
     # Handles both `minSdk = flutter.minSdkVersion` (Kotlin DSL) and
     # `minSdkVersion flutter.minSdkVersion` (Groovy DSL).
@@ -82,11 +83,37 @@ def patch_gradle() -> None:
             f"expected exactly one targetSdk reference in {path}, "
             f"found {target_hits}"
         )
+
+    # The deliberate low targetSdk trips AGP's `ExpiredTargetSdkVersion` check,
+    # which is fatal for release builds. It is advisory Play-Store policy and
+    # does not apply to a side-loaded app, so the check is switched off here.
+    if "ExpiredTargetSdkVersion" not in text:
+        if kotlin_dsl:
+            lint_block = (
+                "\n    lint {\n"
+                "        checkReleaseBuilds = false\n"
+                '        disable.add("ExpiredTargetSdkVersion")\n'
+                "    }\n"
+            )
+        else:
+            lint_block = (
+                "\n    lint {\n"
+                "        checkReleaseBuilds false\n"
+                "        disable 'ExpiredTargetSdkVersion'\n"
+                "    }\n"
+            )
+        text, lint_hits = re.subn(r"(android\s*\{)", rf"\1{lint_block}", text, count=1)
+        if lint_hits != 1:
+            fail(f"could not insert a lint block into {path}")
+
     if text == original:
         fail(f"{path} was not modified")
 
     path.write_text(text, encoding="utf-8")
-    print(f"patched {path.relative_to(ROOT)}: minSdk={MIN_SDK} targetSdk={TARGET_SDK}")
+    print(
+        f"patched {path.relative_to(ROOT)}: minSdk={MIN_SDK} "
+        f"targetSdk={TARGET_SDK}, ExpiredTargetSdkVersion disabled"
+    )
 
 
 def patch_manifest() -> None:

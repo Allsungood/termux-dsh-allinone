@@ -42,9 +42,10 @@ class EnvironmentService {
 
   /// One PRoot invocation answers "what is installed?" for every tool.
   Future<List<ToolStatus>> probe() async {
+    final catalog = ToolStatus.catalog(config: _config);
     final runtimePaths = await paths;
     if (!await runtimePaths.proot.exists()) {
-      return ToolStatus.catalog();
+      return catalog;
     }
     final proot = ProotRuntime(runtimePaths);
     const script =
@@ -68,10 +69,10 @@ class EnvironmentService {
         }
       }
     } catch (_) {
-      return ToolStatus.catalog();
+      return catalog;
     }
 
-    return ToolStatus.catalog()
+    return catalog
         .map(
           (tool) => tool.copyWith(
             installed: present.containsKey(tool.id),

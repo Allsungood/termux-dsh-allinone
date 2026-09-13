@@ -1,276 +1,409 @@
-# 用户指南
+# User Guide
 
-## 快速开始
+Everything a user needs: installing the APK, the first run, what each tab does, how to use every
+tool, and what to do when something goes wrong.
 
-### 方式一：安装 APK（推荐，最简单）
+> **Status of this release.** CI builds the APK, but **the runtime has not been verified on a
+> physical device yet**. Expect rough edges around the first-run download and around starting the
+> services; please report them in
+> [Issues](https://github.com/Allsungood/termux-dsh-allinone/issues).
 
-1. **下载 APK**
-   - 访问 [GitHub Releases](https://github.com/yourname/termux-dsh-allinone/releases)
-   - 下载最新的 `app-release.apk` (约 50-80MB)
+**Contents**
 
-2. **安装**
-   - 点击 APK 文件安装
-   - 如果提示"未知来源应用"，请在设置中允许安装
+- [What you need](#what-you-need)
+- [Install the APK](#install-the-apk)
+- [First run](#first-run)
+- [The Tools tab](#the-tools-tab)
+- [The Console tab](#the-console-tab)
+- [The Settings tab](#the-settings-tab)
+- [Tool by tool](#tool-by-tool)
+- [Troubleshooting](#troubleshooting)
+- [Uninstall](#uninstall)
+- [Quick command reference](#quick-command-reference)
 
-3. **首次运行**
-   - 打开 App
-   - 点击 **"开始一键设置"**
-   - 等待 2-5 分钟（取决于网速和设备性能）
-   - 看到"环境已就绪"后点击"进入主界面"
+---
 
-### 方式二：Termux 命令行安装（进阶用户）
+## What you need
 
-```bash
-# 安装 Termux (从 F-Droid，不要用 Play Store 版本)
-# https://f-droid.org/packages/com.termux/
+| | |
+|---|---|
+| Android | 7.0 (API 24) or newer |
+| CPU | **arm64 (aarch64)** or **x86_64** only. 32-bit ARM devices are not supported at all. |
+| Free storage | ~55 MB of downloads on first run plus the unpacked rootfs and packages — plan for a few GB. Ollama adds ~1.5 GB before any model. |
+| Network | Wi-Fi strongly recommended. The installer reaches GitHub, `cdimage.ubuntu.com`, `nodejs.org`, the Ubuntu archive and npm. |
+| Root | Not required — and not used. |
 
-# 在 Termux 中运行一键安装脚本
-curl -fsSL https://raw.githubusercontent.com/yourname/termux-dsh-allinone/main/scripts/setup-all.sh | bash -s -- -y
-```
+Not sure which APK you need? Every mainstream Android phone and tablet since roughly 2017 is
+**arm64**. Emulators and x86 Chromebooks need **x86_64**.
 
-### 方式三：从源码构建（开发者）
+---
 
-```bash
-# 1. 克隆仓库
-git clone https://github.com/yourname/termux-dsh-allinone.git
-cd termux-dsh-allinone
+## Install the APK
 
-# 2. 构建自定义 Bootstrap (需要 Linux arm64 环境)
-cd bootstrap/scripts
-bash make-bootstrap.sh
+1. Open [GitHub Releases](https://github.com/Allsungood/termux-dsh-allinone/releases/latest).
+2. Download `termux-allinone-arm64.apk` or `termux-allinone-x86_64.apk`.
+3. Allow your browser or file manager to install unknown apps, then tap the downloaded file and
+   install it.
+4. You will see a warning about installing an app from outside a store — that is expected, this app
+   is **not on Google Play** (see [Why targetSdk 28](../README.md#why-targetsdk-28)).
+5. Launch **Termux All-in-One**.
 
-# 3. 构建 Flutter APK
-cd ../../flutter_app
-flutter pub get
-flutter build apk --release --target-platform android-arm64
-# 输出: build/app/outputs/flutter-apk/app-release.apk
+The app displays as *Termux All-in-One*; its package is `com.allsungood.termux_dsh_allinone`.
+
+---
+
+## First run
+
+The first screen explains what is about to be installed and offers one button: **Install
+environment**.
+
+1. Tap it. A progress bar and a live log console appear.
+2. The installer works through six phases: PRoot → Ubuntu rootfs → base packages (`git`, `python3`,
+   `curl`, `ca-certificates`, `xz-utils`, `tar`, `bash`, `ripgrep`, `procps`) → Node.js 22.11.0 →
+   `npm install -g @deepseek-ai/dsh openclaw` → verification.
+3. On a fast Wi-Fi connection the ~55 MB of downloads take a few minutes; the apt and npm steps add
+   more time and are CPU-bound. **Keep the screen on and the app in the foreground.**
+4. When it says *Setup complete*, tap **Open dashboard**.
+
+Things you may see in the log:
+
+| Log line | Meaning |
+|---|---|
+| `WARNING: npm global install exited with code …` | dsh/OpenClaw could not be installed from npm. **Not fatal** — retry later from the Console with `npm install -g @deepseek-ai/dsh openclaw`. |
+| `ERROR: FormatException: Unsupported CPU architecture…` | Your device is neither arm64 nor x86_64. There is no build for it. |
+| `ERROR: HttpException: HTTP 404 while fetching …` | An upstream URL moved. Please open an issue. |
+| `Setup failed` + an error line | The button becomes **Retry installation**; retry is cheap because already-downloaded archives are reused. |
+
+If the download is interrupted (screen off, app killed, network drop), a **partial file** may be left
+in the download cache. Retries reuse it and then fail at extraction. Delete it from the Console and
+retry:
+
+```sh
+ls -l /host-downloads
+rm /host-downloads/ubuntu-base-24.04.5-base-arm64.tar.gz     # or whichever file is truncated
 ```
 
 ---
 
-## 主界面功能
+## The Tools tab
 
-### 🏠 首页 (工具仪表盘)
+The dashboard. Each tool gets a card showing a state and the actions that make sense for it.
 
-| 区域 | 功能 |
-|------|------|
-| **状态卡片** | 显示 dsh / openclaw / ollama 安装和运行状态 |
-| **工具卡片** | 点击启动对应服务，显示版本号 |
-| **下拉刷新** | 重新检测服务状态 |
-| **右上角设置** | 进入设置页面 |
+| Card state | Meaning |
+|---|---|
+| `running` (green dot) | The app has a live process for it. |
+| `installed` | The binary exists inside the guest, but no process is running. |
+| `not installed` | Absent, and it is optional (currently only Ollama). |
+| `missing` | Absent, and the installer should have put it there — try Settings → **Repair / re-run installation**. |
 
-### 💻 终端页面
+Buttons:
 
-完整的 Shell 终端体验：
-- **复制/粘贴** - 长按文本选择，工具栏操作
-- **命令历史** - 上下箭头键浏览
-- **Tab 补全** - 支持路径/命令补全
-- **URL 点击** - 自动识别链接可点击打开
-- **额外按键** - Ctrl, Esc, Tab, 方向键工具栏
+| Button | What it does |
+|---|---|
+| **Start** | Runs the tool's service as a background guest process: `dsh web --port 3080 --host 127.0.0.1`, `openclaw gateway`, or `ollama serve`. |
+| **Stop** | Sends `SIGTERM` to that process. |
+| **Open** | Opens the tool's local dashboard in an in-app WebView (dsh on `http://127.0.0.1:3080`, OpenClaw on `http://127.0.0.1:18789`). |
+| **Install** | Ollama only: runs the ~1.5 GB install on a progress-and-log screen. |
 
-常用命令：
-```bash
-# dsh 相关
-dsh --version          # 查看版本
-dsh web --port 3080    # 启动 Web UI
-dsh update -t next -y  # 更新到最新版
+The summary card at the top counts how many of the six catalogue entries are ready. Pull down to
+re-probe — the app answers "what is installed?" with a single PRoot invocation that checks `node`,
+`npm`, `git`, `python3`, `dsh`, `openclaw` and `ollama` inside the guest.
 
-# openclaw 相关
-openclawx setup        # 首次配置
-openclawx onboarding   # 配置 API Key
-openclawx start        # 启动网关
-openclawx status       # 查看状态
-
-# ollama 相关
-ollama serve           # 启动服务
-ollama pull llama3.2:1b # 下载模型
-ollama list            # 列出模型
-ollama run llama3.2:1b # 交互式运行
-```
-
-### 🌐 Web 仪表盘
-
-内嵌 WebView，无缝访问：
-- **dsh Web UI** - `http://localhost:3080`
-- **OpenClaw Dashboard** - `http://localhost:18789`
-
-功能：
-- 刷新/前进/后退
-- 缩放控制
-- 外部浏览器打开
-- 自动携带认证 Token
-
-### ⚙️ 设置页面
-
-| 设置项 | 说明 | 默认值 |
-|--------|------|--------|
-| dsh Web 端口 | dsh web 监听端口 | 3080 |
-| dsh 审批策略 | never=自动执行, ask=每次询问, manual=手动 | never |
-| OpenClaw 端口 | 网关监听端口 | 18789 |
-| Ollama 端口 | Ollama 服务端口 | 11434 |
-| 默认 Ollama 模型 | 首次下载的模型 | llama3.2:1b |
-| 开机自动启动 | 设备启动时自动拉起服务 | 开启 |
-| 禁用电池优化 | 防止后台被杀 | 开启 |
-| 启动时请求权限 | 自动申请相机/定位等权限 | 开启 |
+**Start the services here, not in the Console.** The Tools tab keeps their output visible (the last
+400 lines per tool) and gives you a Stop button; a foreground command typed into the Console has
+neither.
 
 ---
 
-## 常见问题
+## The Console tab
 
-### Q: 首次设置卡在某个步骤怎么办？
-**A**: 
-- 确保网络连接正常（需要访问 GitHub、npm、NodeSource）
-- 尝试切换网络或使用代理
-- 查看设置日志中的错误信息
-- 可以点击"重新设置"再试一次
+A shell running **inside the guest** (`/bin/sh` under PRoot), with a row of quick-command chips:
+`dsh --version`, `dsh web --port 3080`, `openclaw gateway`, `ollama list`, `node --version`,
+`python3 --version`. Type a command, press the send button (or the keyboard's send action) and the
+output appears above, colour-coded.
 
-### Q: dsh web 打不开 / 显示连接被拒绝？
-**A**:
-1. 确认 dsh 已安装：终端运行 `dsh --version`
-2. 手动启动：`dsh web --port 3080`
-3. 检查端口是否被占用：`netstat -tlnp | grep 3080`
-4. 确认审批策略为 `never`：`cat ~/.dsh/config.json`
+What works well: ordinary line-oriented commands, `apt-get install`, `git`, `npm`, `python3`,
+`curl`, `rg`, `ls`, `cat`, `df`, `du`, `ps`, `free`.
 
-### Q: OpenClaw 启动失败 / 报错 os.networkInterfaces？
-**A**:
-这是 Android Bionic libc 的已知问题。解决方案：
-```bash
-# 重新运行配置脚本
-bash scripts/setup-openclaw.sh
+What does **not** work, by design:
 
-# 或手动添加 bypass
-mkdir -p ~/.openclaw
-cat > ~/.openclaw/bionic-bypass.js << 'EOF'
-const os = require('os');
-const originalNetworkInterfaces = os.networkInterfaces;
-os.networkInterfaces = function() {
-  try {
-    const interfaces = originalNetworkInterfaces.call(os);
-    if (interfaces && Object.keys(interfaces).length > 0) return interfaces;
-  } catch (e) {}
-  return { lo: [{ address: '127.0.0.1', netmask: '255.0.0.0', family: 'IPv4', mac: '00:00:00:00:00:00', internal: true, cidr: '127.0.0.1/8' }] };
-};
-EOF
-echo 'export NODE_OPTIONS="--require ~/.openclaw/bionic-bypass.js"' >> ~/.bashrc
-source ~/.bashrc
-```
+- **It is a pipe, not a PTY.** Full-screen curses programs — `vi`, `nano`, `htop`, `top` — cannot
+  render. Use `cat`/`sed` to edit files, and `ps`/`free` for status.
+- **No job control and no way to send Ctrl-C** from the UI. Do not start a long-running foreground
+  server in the Console; start it from the Tools tab instead.
+- **No Tab completion and no arrow-key history.** The input is a normal text field; you can select
+  and copy output text, but the shell never sees keystrokes other than whole lines you submit.
 
-### Q: Ollama 下载模型很慢 / 失败？
-**A**:
-- 使用国内镜像：`export OLLAMA_HOST=http://localhost:11434`
-- 手动下载模型文件放到 `~/.ollama/models/` 或 `/sdcard/ollama-models/`
-- 选择小模型：`llama3.2:1b` (约 1.3GB) 或 `qwen2:0.5b` (约 400MB)
-
-### Q: 后台服务被系统杀死？
-**A**:
-1. **设置中开启"禁用电池优化"**
-2. 手动设置：设置 → 电池 → 应用管理 → Termux All-in-One → 允许后台运行
-3. Termux 设置：设置 → 应用 → Termux → 电池 → 无限制
-4. 使用前台服务通知保持活跃
-
-### Q: 权限被拒绝 (Permission denied)？
-**A**:
-```bash
-# 授予存储权限
-termux-setup-storage
-
-# 检查文件权限
-ls -la ~/.dsh/
-ls -la ~/.openclaw/
-```
+Useful facts: `HOME` is `/root`, the working directory is `/root`, `PATH` includes `/usr/local/bin`,
+and the file cache from the installer is mounted read-write at `/host-downloads`. The guest cannot
+see your phone's shared storage (`/sdcard` is not mounted).
 
 ---
 
-## 进阶用法
+## The Settings tab
 
-### 自定义 Bootstrap
+| Setting | Default | Notes |
+|---|---|---|
+| dsh web UI port | `3080` | Validated as an integer between 1 and 65535. |
+| OpenClaw gateway port | `18789` | Same validation. |
+| Ollama port | `11434` | Same validation. |
+| Default Ollama model | `llama3.2:1b` | Must be non-empty. |
+| Keep services awake | on | See the caveat below. |
+| **Repair / re-run installation** | — | Re-runs the full installer on a progress-and-log screen. |
 
-如果你想预装额外的包，修改 `bootstrap/scripts/packages.txt`：
+**Two honest caveats about this tab:**
 
-```text
-# 添加你需要的包
-golang
-rust
-docker
-# 等等...
-```
+1. The port/keep-awake values are **stored preferences**. The Tools tab starts the services with its
+   built-in commands (`dsh web --port 3080 --host 127.0.0.1`, `openclaw gateway`, `ollama serve`)
+   and the Open buttons point at the default URLs. If you change a port here, launch the service
+   manually from the Console with a matching flag, for example
+   `dsh web --port 8080 --host 127.0.0.1`.
+2. There is currently **no foreground service or wake-lock implementation** in the app, so the
+   "keep services awake" switch does not by itself keep Android from reclaiming the processes. See
+   [Background kills](#background-kills).
 
-然后重新构建：
-```bash
-cd bootstrap/scripts
-ARCH=aarch64 bash make-bootstrap.sh
-```
-
-### 多设备同步配置
-
-配置文件位置：
-- `~/.dsh/config.json` - dsh 配置
-- `~/.openclaw/openclaw.json` - OpenClaw 配置
-- `~/.ollama/config` - Ollama 配置
-
-可通过 Syncthing 或手动同步这些文件。
-
-### 开发调试
-
-查看 Flutter 日志：
-```bash
-# 连接手机 USB 调试
-flutter logs
-
-# 或使用 adb
-adb logcat | grep -i flutter
-```
-
-查看 Termux 后台进程：
-```bash
-# 在 App 终端或独立 Termux 中
-ps aux | grep -E 'dsh|openclaw|ollama'
-netstat -tlnp
-```
+**Repair** re-runs the installer without wiping anything: PRoot is re-extracted and re-`chmod`ed, the
+package step and the `npm install -g` step run again, and cached archives are reused. It does **not**
+re-extract the Ubuntu rootfs while `rootfs/etc/os-release` exists, so it cannot upgrade the Ubuntu
+version in place. For a genuinely clean install, clear the app's data from Android's app settings
+(Settings → Apps → Termux All-in-One → Storage → **Clear data**); the next launch returns to the
+setup screen.
 
 ---
 
-## 卸载清理
+## Tool by tool
 
-### 卸载 App
-长按图标 → 卸载，或设置 → 应用 → 卸载
+### dsh (DeepSeek Harness)
 
-### 完全清理数据（可选）
-```bash
-# 在 Termux 中运行
-rm -rf ~/.dsh
-rm -rf ~/.openclaw
-rm -rf ~/.ollama
-rm -rf ~/.local/opt/dsh-termux-runtime
-rm ~/.local/bin/dsh
-rm ~/.local/bin/openclawx
-rm ~/.local/bin/ollama-termux
+An AI coding agent with a web UI.
 
-# 从 .bashrc 移除相关行
-sed -i '/dsh-termux/d' ~/.bashrc
-sed -i '/bionic-bypass/d' ~/.bashrc
-sed -i '/ollama-termux/d' ~/.bashrc
-source ~/.bashrc
+1. **Tools** tab → **dsh** card → **Start**. The app runs
+   `dsh web --port 3080 --host 127.0.0.1` inside the guest.
+2. Tap **Open** to load `http://127.0.0.1:3080` in the in-app WebView, or open it in your normal
+   browser with the ↗ button.
+
+The installer pre-seeds the config so the launcher never stalls on a confirmation prompt:
+
+```
+/root/.dsh/config.json  →  {"approvalPolicy":"never","webPort":3080}
 ```
 
+Read it or change it from the Console:
+
+```sh
+cat /root/.dsh/config.json
+dsh --version
+```
+
+### OpenClaw
+
+An AI gateway that runs in the guest as a Node.js service.
+
+1. **Tools** tab → **OpenClaw** card → **Start** (runs `openclaw gateway`).
+2. **Open** loads `http://127.0.0.1:18789`.
+
+If the service exits immediately, its output is in the card's log — open the Tools tab again and
+check the last lines before it stopped.
+
+### Ollama (optional, ~1.5 GB)
+
+Ollama is **never** installed by the default setup; you trigger it yourself.
+
+1. **Tools** tab → **Ollama** card → **Install**. Stay on Wi-Fi and keep the screen on: the archive
+   is about 1.5 GB, and it is unpacked inside the guest with `tar --zstd` (Android's own `tar` has no
+   zstd support, so `zstd` is installed from the Ubuntu archive first).
+2. When it finishes, tap **Start** on the Ollama card — that runs `ollama serve` (port 11434).
+3. Pull and run a model **from the Console**:
+
+```sh
+ollama pull llama3.2:1b      # small model, a good first choice
+ollama list
+ollama run llama3.2:1b
+```
+
+Reality check: **a model may not fit in your device's RAM.** If the app or the guest process is
+killed while loading a model, try a smaller model or a more aggressively quantised one, and close
+other apps. The "Default Ollama model" setting is a stored preference — the model is whatever you
+name on the `ollama pull` / `ollama run` command line.
+
+Model files live under `/root/.ollama` inside the guest and are deleted with the app.
+
+### Node.js, git and Python 3
+
+These are ready as soon as setup completes; they have no service to start.
+
+```sh
+node --version          # v22.11.0
+npm --version
+npm install -g <package>
+
+git --version
+git clone https://github.com/<owner>/<repo> ~/src/<repo>
+cd ~/src/<repo> && git status
+
+python3 --version
+```
+
+Notes:
+
+- `git` and `python3` read and write inside the guest only (`/root`, `/usr/local`, `/tmp`). There is
+  no `/sdcard` mount, so clone or download into the guest and push your work back out with `git
+  push`, or read it from the Console with `cat`.
+- `pip` is **not** part of the base install. Add it if you need it:
+  `apt-get update && apt-get install -y python3-pip`.
+- The package manager works because the installer writes `/etc/resolv.conf` and a classic
+  `/etc/apt/sources.list` into the rootfs. `apt-get install -y <package>` therefore works for other
+  tools too (the guest's package lists are cleaned after setup, so run `apt-get update` first).
+
 ---
 
-## 获取帮助
+## Troubleshooting
 
-- **GitHub Issues**: [提交 Bug/功能请求](https://github.com/yourname/termux-dsh-allinone/issues)
-- **dsh 文档**: https://github.com/deepseek-ai/deepseek-harness
-- **OpenClaw 文档**: https://github.com/anthropics/openclaw
-- **Ollama 文档**: https://ollama.ai/docs
-- **Termux Wiki**: https://wiki.termux.com/
+### Downloads fail or stall
+
+- Check that you can reach GitHub, `cdimage.ubuntu.com` and `nodejs.org`; captive portals and some
+  carriers block one or another.
+- Retry. The installer keeps every archive it has already downloaded, so a retry resumes cheaply.
+- If a download was cut off mid-file, the **partial file is kept and reused**, which then fails at
+  extraction. List and delete it from the Console, then retry:
+
+```sh
+ls -lh /host-downloads
+rm /host-downloads/<the-truncated-file>
+```
+
+- `HTTP 404 while fetching …` means an upstream URL changed. Please file an issue with the exact URL.
+- If your network needs a proxy, the app does not support configuring one; you would need to route
+  the device's traffic at the system level.
+
+### "Cannot reach http://127.0.0.1:3080"
+
+That is the WebView telling you nothing is listening on the port yet.
+
+1. Go back to **Tools** and check the dsh card. If it says `installed`, tap **Start**.
+2. Re-open the dashboard (**Open**), or press **Try again** on the error screen.
+3. If it says `running` but the page still fails, look at the card's log output — a service can start
+   and then exit immediately. Stop it and start it again.
+4. Verify from the Console:
+
+```sh
+dsh --version                     # is dsh actually installed?
+cat /root/.dsh/config.json        # approvalPolicy / webPort
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080
+```
+
+`curl` is the right tool here — `netstat` and `ss` are **not** installed in this image.
+
+5. Same procedure for OpenClaw on port `18789`.
+6. Remember the Tools tab always uses the default ports; if you changed a port in Settings, start the
+   service yourself from the Console with the matching flag.
+
+### Out of storage
+
+The installer **keeps** every archive it downloads (that is what makes retries fast), so budget for
+the downloads plus the extracted copies. Check and reclaim space from the Console:
+
+```sh
+df -h /
+du -sh /root/.ollama      # only if you installed Ollama
+ls -lh /host-downloads
+rm /host-downloads/*.tar.gz /host-downloads/*.tar.xz /host-downloads/*.zip
+rm /host-downloads/*.tar.zst    # only if you are done installing Ollama — it is 1.5 GB
+```
+
+Safe to delete: the cached archives in `/host-downloads`. Do not delete `/usr/local`, `/root/.dsh`
+or the runtime directory on the Android side.
+
+### Background kills
+
+Android reclaims background processes; the app's service processes are ordinary children of the app,
+and **the app does not currently run a foreground service**, so services can be killed when the app
+is backgrounded or when memory runs low.
+
+What you can do:
+
+1. Keep the app on screen (or at least in the recent-apps list) while a service must stay up.
+2. Disable battery optimisation for **Termux All-in-One** in Android's settings — typically
+   Settings → Apps → Termux All-in-One → Battery → *Unrestricted* / *Don't optimise*.
+3. The *Keep services awake* switch in the Settings tab is a stored preference only; do not rely on
+   it on its own.
+
+How you notice: the Tools card flips from `running` back to `installed`, and the card's log ends with
+an `-- exited with code …` line. Start the service again.
+
+### Setup says the architecture is unsupported
+
+`ERROR: FormatException: Unsupported CPU architecture: only arm64 and x86_64 devices are supported.`
+— your device is 32-bit ARM (`armeabi-v7a`), or `uname -m` reported something else. No build exists for
+it and supporting it is out of scope.
+
+### Ollama install fails
+
+- `apt-get install zstd` is done inside the guest as part of the Ollama install, so a broken network
+  or a stale package index breaks it. Retry from the Tools tab.
+- If the archive was truncated, delete it and retry:
+  `rm /host-downloads/ollama-linux-arm64.tar.zst`.
+- If it runs out of space mid-extraction, free space in `/host-downloads` and `/usr/local` first.
+
+### The Console seems frozen
+
+You probably started a foreground long-running command (`dsh web`, `ollama serve`). The Console has no
+Ctrl-C and no job control, so it will look stuck until the command exits. Stop the service from the
+Tools tab instead; if the shell itself is unusable, leave the Console tab and come back (the shell is
+a long-lived process owned by the app), or restart the app.
+
+### Re-running setup
+
+**Settings → Repair / re-run installation.** It reuses cached archives, re-runs the package and npm
+steps and is safe to repeat. For a completely clean environment, clear the app's data from Android's
+app settings and relaunch — you will get the first-run screen again and a fresh rootfs.
 
 ---
 
-## 版本历史
+## Uninstall
 
-| 版本 | 日期 | 变更 |
-|------|------|------|
-| 1.0.0 | 2025-01-XX | 首个正式版本 |
+Uninstalling the app deletes **everything**: the PRoot runtime, the Ubuntu rootfs, the installed
+packages, npm globals, dsh's config and any Ollama models. Nothing is written to shared storage, so
+no leftovers remain on `/sdcard`.
+
+If you need to keep something, save it *before* uninstalling — the release APK is not debuggable, so
+`adb run-as` cannot reach the sandbox. Push your work to a git remote from inside the guest, or copy
+it out through the Console (`cat`, base64, or `curl`/`git push`).
+
+Reinstalling afterwards means downloading everything again, since the caches were in that sandbox.
 
 ---
 
-*Made with ❤️ for Android developers*
+## Quick command reference
+
+Run these in the **Console** tab, inside the guest.
+
+| Command | Purpose |
+|---|---|
+| `dsh --version` | Confirm dsh is installed. |
+| `dsh web --port 3080 --host 127.0.0.1` | Start the dsh web UI manually (prefer the Tools tab). |
+| `cat /root/.dsh/config.json` | Inspect dsh's approval policy and web port. |
+| `openclaw gateway` | Start the OpenClaw gateway manually (prefer the Tools tab). |
+| `ollama list` | Models you have pulled. |
+| `ollama pull llama3.2:1b` | Download a small model. |
+| `ollama run llama3.2:1b` | Chat with a model (needs `ollama serve` running). |
+| `node --version` / `npm --version` | Confirm the Node.js toolchain. |
+| `git --version` / `python3 --version` | Confirm git and Python. |
+| `apt-get update && apt-get install -y <pkg>` | Add another Linux package. |
+| `curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3080` | Check whether a local service is answering. |
+| `df -h /` | Free space inside the guest. |
+| `ls -lh /host-downloads` | Cached installer archives. |
+| `ps aux` | What is running inside the guest. |
+
+---
+
+## Getting help
+
+- Bugs and feature requests:
+  [github.com/Allsungood/termux-dsh-allinone/issues](https://github.com/Allsungood/termux-dsh-allinone/issues)
+- Architecture and internals: [ARCHITECTURE.md](ARCHITECTURE.md)
+- Building from source: [BUILD.md](BUILD.md)
+- Upstream projects: [dsh on npm](https://www.npmjs.com/package/@deepseek-ai/dsh) ·
+  [Ollama](https://github.com/ollama/ollama) ·
+  [Ubuntu base images](https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/) ·
+  [PRoot build used here](https://github.com/ahmed-alnassif/proot/releases)

@@ -1,331 +1,210 @@
-# Termux All-in-One — dsh + openclaw + git + ollama 一键启动器
+# Termux All-in-One
 
-> **小白友好的安卓终端环境**：Flutter 图形界面 + 内置 Termux 运行时，预装 dsh(DeepSeek Harness)、openclaw(Node.js)、git、ollama 等工具，支持图形化和控制台双模式。
+**一个自带 Linux 运行环境的 Flutter 安卓应用。**
 
-![License](https://img.shields.io/badge/License-MIT-blue.svg)
-![Android](https://img.shields.io/badge/Android-10%2B-brightgreen?logo=android)
-![Flutter](https://img.shields.io/badge/Flutter-3.24-02569B?logo=flutter)
-![Architecture](https://img.shields.io/badge/Arch-arm64%20%7C%20arm%20%7C%20x86_64-orange)
+首次启动时，App 会把静态编译的 PRoot 和一套 Ubuntu 24.04 根文件系统下载到自己的私有目录里，
+解压后在"客户机"内装好一套小工具链：`git`、`python3`、`curl`、`bash`、`ripgrep`、
+Node.js 22 LTS，以及 **dsh（DeepSeek Harness）** 和 **OpenClaw**；**Ollama** 属于可选组件，
+需要你手动点一下才会装。
 
----
+不需要 root，也不需要另外安装 Termux。所有东西都待在这一个 App 的沙箱里，通过 PRoot 执行。
 
-## 📱 效果预览
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+![Android](https://img.shields.io/badge/Android-7.0%2B%20(API%2024)-brightgreen?logo=android)
+![Flutter](https://img.shields.io/badge/Flutter-stable-02569B?logo=flutter)
+![Arch](https://img.shields.io/badge/Arch-arm64%20%7C%20x86--64-orange)
 
-| 首页仪表盘 | 终端模拟器 | Web 仪表盘 | 设置页面 |
-|------------|------------|------------|----------|
-| ![Home](docs/assets/home.png) | ![Terminal](docs/assets/terminal.png) | ![Web](docs/assets/web.png) | ![Settings](docs/assets/settings.png) |
-
----
-
-## 🚀 快速开始
-
-### 方式一：下载 APK 安装（推荐，最简单）
-
-1. 访问 [GitHub Releases](https://github.com/yourname/termux-dsh-allinone/releases)
-2. 下载最新的 `app-release.apk` (约 50-80MB)
-3. 安装到 Android 设备
-4. 打开 App → 点击 **"开始一键设置"**
-5. 等待 2-5 分钟自动配置完成
-6. 点击 **"进入主界面"** 开始使用
-
-### 方式二：Termux 命令行安装（进阶用户）
-
-```bash
-# 确保已安装 Termux (从 F-Droid，不要用 Play Store 版本)
-# https://f-droid.org/packages/com.termux/
-
-# 一键安装
-curl -fsSL https://raw.githubusercontent.com/yourname/termux-dsh-allinone/main/scripts/setup-all.sh | bash -s -- -y
-```
-
-### 方式三：从源码构建（开发者）
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/yourname/termux-dsh-allinone.git
-cd termux-dsh-allinone
-
-# 2. 构建自定义 Bootstrap (需要 Linux arm64 环境)
-cd bootstrap/scripts
-bash make-bootstrap.sh
-
-# 3. 构建 Flutter APK
-cd ../../flutter_app
-flutter pub get
-flutter build apk --release --target-platform android-arm64
-# 输出: build/app/outputs/flutter-apk/app-release.apk
-```
+[English](README.md) | 简体中文
 
 ---
 
-## ✨ 核心功能
+## ⚠️ 先看这里：验证状态
 
-### 🎨 现代化图形界面 (Flutter App)
-- **首页仪表盘** - 所有工具一键启动，实时状态显示
-- **完整终端** - 支持复制/粘贴/Tab补全/URL点击/额外按键工具栏
-- **内嵌 WebView** - 无缝访问 dsh Web UI 和 OpenClaw Dashboard
-- **设置中心** - 端口配置、审批策略、电池优化、权限管理
-- **Material 3 设计** - 支持深色/浅色模式，流畅动画
+**CI 能把 APK 构建出来，但作者还没有在真机上验证过运行时行为。** 组件测试覆盖到的 Dart 逻辑是通的，
+所有上游下载地址在写进代码前也都确认过可以访问；但从首次下载、解压 rootfs、PRoot 执行，
+到 `dsh web` 和 `openclaw gateway` 在 `127.0.0.1` 上真正起来——这条完整链路**尚未在真实设备上得到确认**。
 
-### 📦 开箱即用的 Termux 环境 (Custom Bootstrap)
-| 工具 | 版本 | 说明 |
-|------|------|------|
-| **Node.js** | 24 LTS | dsh/openclaw 运行时环境 |
-| **dsh** | latest | DeepSeek Harness AI 助手 |
-| **openclaw** | latest | AI Gateway + 设备能力 |
-| **ollama** | CLI | 本地 LLM 推理命令行 |
-| **Git** | latest | 版本控制 |
-| **Python** | 3.12 | 脚本/构建依赖 |
-| **SSH** | latest | 远程连接 |
-| **ripgrep/fd** | latest | 现代搜索工具 |
-| **make/clang** | latest | 原生模块编译支持 |
+所以请把当前版本当作预览版来用，遇到问题欢迎到
+[Issues](https://github.com/Allsungood/termux-dsh-allinone/issues) 反馈。
 
-### ⚡ 零配置体验
-- **审批策略默认 `never`** - 无需手动确认，自动执行命令
-- **Bionic Bypass** - 修复 Android 上 `os.networkInterfaces()` 崩溃
-- **电池优化豁免** - 后台服务持久运行
-- **存储权限自动申请** - 首次运行自动配置
+另外两件事最好提前知道：
+
+- 本应用**无法上架 Google Play**，因为它把 `targetSdk` 固定在了 28（[原因见下](#为什么必须锁定-targetsdk-28)）。
+  安装方式是从 [GitHub Releases](https://github.com/Allsungood/termux-dsh-allinone/releases) 侧载 APK。
+- 卸载 App 会**连带删掉整个环境**，包括你已经下载的 Ollama 模型。
 
 ---
 
-## 🏗️ 架构设计
+## 运行要求
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                      Flutter Application                         │
-│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
-│  │  Home页      │  │  Terminal页   │  │  WebDashboard页         │  │
-│  │  (工具卡片)  │  │  (完整Shell)  │  │  (dsh/openclaw WebView) │  │
-│  └──────┬──────┘  └──────┬───────┘  └───────────┬────────────┘  │
-│         │                │                      │                │
-│  ┌──────▼────────────────▼──────────────────────▼────────────┐  │
-│  │              Native Bridge (Kotlin)                        │  │
-│  │  - Process Management (启动/停止/监控后台进程)               │  │
-│  │  - Permission Handling (权限申请与管理)                     │  │
-│  │  - File System Access (文件读写与存储)                      │  │
-│  │  - Battery Optimization (电池优化豁免)                      │  │
-│  └─────────────────────────┬──────────────────────────────────┘  │
-│                            │                                      │
-└────────────────────────────┼──────────────────────────────────────┘
-                             │
-┌────────────────────────────▼──────────────────────────────────────┐
-│                    Termux Environment (Android)                    │
-│  ┌──────────────────────────────────────────────────────────────┐ │
-│  │              Custom Termux Bootstrap                          │ │
-│  │  预装: nodejs-lts, git, python3, dsh-termux, ollama, ...     │ │
-│  └──────────────────────────────────────────────────────────────┘ │
-│  ┌──────────────────────────────────────────────────────────────┐ │
-│  │  启动时自动执行: 配置 Node.js、生成 wrapper、设置审批策略      │ │
-│  └──────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────┘
-```
+| 项目 | 要求 |
+|---|---|
+| Android 版本 | 7.0（API 24）及以上 |
+| CPU 架构 | **仅支持 arm64（aarch64）和 x86_64**，32 位 ARM（`armeabi-v7a`）不支持 |
+| 存储空间 | 首次运行约 55 MB 下载量，再加上解压后的 rootfs 与 apt 软件包（建议预留几个 GB）；装 Ollama 还要再加约 1.5 GB 和模型文件 |
+| 网络 | 需要能访问 GitHub、`cdimage.ubuntu.com`、`nodejs.org`、Ubuntu 软件源和 npm 源 |
+| Root | **不需要** |
 
-详见 [架构设计文档](docs/ARCHITECTURE.md)
+App 会通过 `uname -m` 判断架构；如果既不是 `aarch64`/`arm64` 也不是 `x86_64`/`amd64`，
+它会直接停下来并提示 *"Unsupported CPU architecture: only arm64 and x86_64 devices are supported."*
 
 ---
 
-## 📖 使用指南
+## 安装
 
-### 主界面操作
+1. 打开 [Releases](https://github.com/Allsungood/termux-dsh-allinone/releases/latest)。
+2. 按机型下载对应的 APK：
+   - `termux-allinone-arm64.apk` —— 2017 年之后几乎所有的安卓手机和平板
+   - `termux-allinone-x86_64.apk` —— 安卓模拟器、x86 架构的 Chromebook、部分平板
+3. 在系统里给你的浏览器或文件管理器打开"安装未知应用"权限，然后点开 APK 安装。
+4. 启动 **Termux All-in-One**，跟着首屏走就行。
 
-| 页面 | 功能 |
-|------|------|
-| **首页** | 查看工具状态，点击卡片启动服务 |
-| **终端** | 完整 Shell 体验，运行任意命令 |
-| **Web仪表盘** | 访问 dsh Web UI (3080) / OpenClaw (18789) |
-| **设置** | 修改端口、审批策略、系统选项 |
+应用标识：
 
-### 常用命令速查
-
-```bash
-# dsh (DeepSeek Harness)
-dsh --version              # 查看版本
-dsh web --port 3080        # 启动 Web UI
-dsh update -t next -y      # 更新到最新版
-
-# OpenClaw AI Gateway
-openclawx setup            # 首次配置环境
-openclawx onboarding       # 配置 API Key (Gemini/OpenAI/Claude)
-openclawx start            # 启动网关
-openclawx status           # 查看状态
-openclawx shell            # 进入 Ubuntu 环境
-
-# Ollama 本地推理
-ollama serve               # 启动服务
-ollama pull llama3.2:1b    # 下载小模型 (约 1.3GB)
-ollama list                # 列出已下载模型
-ollama run llama3.2:1b     # 交互式聊天
-```
+| 项目 | 值 |
+|---|---|
+| Application id / namespace | `com.allsungood.termux_dsh_allinone` |
+| Flutter 包名 | `termux_dsh_allinone` |
+| 显示名称 | Termux All-in-One |
 
 ---
 
-## ❓ 常见问题
+## 首次运行
 
-<details>
-<summary><b>Q: 首次设置卡住/失败怎么办？</b></summary>
+首屏（`SetupPage`）会先说明将要做什么，下面只有一个 **Install environment** 按钮。点下去之后，
+进度条和实时日志会一路显示每个阶段：
 
-- 确保网络正常（需访问 GitHub、npm、NodeSource）
-- 尝试切换网络或开启代理
-- 查看设置日志中的红色错误信息
-- 点击"重新设置"再试一次
-</details>
+1. 下载并解压 PRoot 和 loader
+2. 下载并解压 Ubuntu 基础根文件系统
+3. `apt-get install git python3 curl ca-certificates xz-utils tar bash ripgrep procps`
+4. 下载 Node.js 22.11.0，解压到 `/usr/local`
+5. 执行 `npm install -g @deepseek-ai/dsh openclaw`，并写入 `/root/.dsh/config.json`
+6. 验证 `node` 和 `git`，最后写入 `bootstrap.complete` 标记文件
 
-<details>
-<summary><b>Q: dsh web 打不开 / 连接被拒绝？</b></summary>
+完成后点 **Open dashboard** 进入三标签主界面。中途出错的话，错误会打印在日志里，
+按钮会变成 **Retry installation**；已经下载好的压缩包会被复用，所以重试并不费流量。
 
-1. 终端运行 `dsh --version` 确认已安装
-2. 手动启动：`dsh web --port 3080`
-3. 检查端口占用：`netstat -tlnp | grep 3080`
-4. 确认审批策略：`cat ~/.dsh/config.json` 应显示 `"approvalPolicy": "never"`
-</details>
-
-<details>
-<summary><b>Q: OpenClaw 报错 os.networkInterfaces？</b></summary>
-
-这是 Android Bionic libc 问题，运行修复脚本：
-```bash
-bash scripts/setup-openclaw.sh
-```
-或手动添加 bypass（脚本已自动处理）。
-</details>
-
-<details>
-<summary><b>Q: 后台服务被系统杀死？</b></summary>
-
-1. App 设置中开启"禁用电池优化"
-2. 系统设置 → 电池 → 应用管理 → Termux All-in-One → 允许后台运行
-3. Termux 设置：设置 → 应用 → Termux → 电池 → 无限制
-</details>
-
-<details>
-<summary><b>Q: Ollama 下载模型慢？</b></summary>
-
-- 使用小模型：`llama3.2:1b` (1.3GB) 或 `qwen2:0.5b` (400MB)
-- 手动下载放到 `~/.ollama/models/` 或 `/sdcard/ollama-models/`
-- 设置镜像：`export OLLAMA_HOST=http://localhost:11434`
-</details>
-
-更多问题见 [用户指南](docs/USER_GUIDE.md)
+> 第 5 步的 npm 安装被刻意设计成"非致命"：即使失败也只是在日志里给一条 WARNING，
+> 你之后仍然可以在 Console 里手动执行 `npm install -g @deepseek-ai/dsh openclaw` 补上。
 
 ---
 
-## 🛠️ 开发者指南
+## 下载内容一览
 
-### 添加新工具
-1. 在 `bootstrap/scripts/packages.txt` 添加包名
-2. 重新构建 bootstrap：`bash bootstrap/scripts/make-bootstrap.sh`
-3. 在 `EnvironmentService` 添加检测方法
-4. 在 `HomePage` 添加工具卡片
+首次运行的全部下载量约 **55 MB**。
 
-### 多架构支持
-```bash
-# 构建所有架构
-for arch in aarch64 arm x86_64; do
-    ARCH=$arch bash bootstrap/scripts/make-bootstrap.sh
-done
-```
+| 组件 | 版本 | 文件名 | 体积（约） | 来源 |
+|---|---|---|---|---|
+| PRoot（Android 静态编译） | `v26.08.25-7266fb3` | `proot-aarch64.zip` · `proot-x86_64.zip`（包内含 `proot`、`loader`、`loader-m32`） | 各约 0.1 MB | [ahmed-alnassif/proot releases](https://github.com/ahmed-alnassif/proot/releases) |
+| Ubuntu 基础 rootfs | `24.04.5` | `ubuntu-base-24.04.5-base-arm64.tar.gz` · `ubuntu-base-24.04.5-base-amd64.tar.gz` | 28.5 MB · 28.6 MB | [cdimage.ubuntu.com/ubuntu-base/releases/24.04/release](https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release/) |
+| Node.js | `22.11.0` | `node-v22.11.0-linux-arm64.tar.xz` · `node-v22.11.0-linux-x64.tar.xz` | 26.8 MB · 27.9 MB | [nodejs.org/dist/v22.11.0](https://nodejs.org/dist/v22.11.0/) |
+| dsh + OpenClaw | 安装时的 npm 最新版 | — | （走 npm） | `npm install -g @deepseek-ai/dsh openclaw` |
+| **Ollama（可选，需手动触发）** | `v0.34.0` | `ollama-linux-arm64.tar.zst` · `ollama-linux-amd64.tar.zst` | **约 1.5 GB** | [ollama/ollama releases](https://github.com/ollama/ollama/releases) |
 
-### 本地测试
-```bash
-cd flutter_app
-flutter analyze          # 静态分析
-dart format --set-exit-if-changed lib/  # 格式检查
-flutter test             # 单元测试
-flutter build apk --release --target-platform android-arm64
-```
+以上全部通过 HTTPS 下载，并解压到
+`/data/data/com.allsungood.termux_dsh_allinone/files/runtime/`。
+
+客户机内安装的基础软件包是 `git`、`python3`、`curl`、`ca-certificates`、`xz-utils`、`tar`、
+`bash`、`ripgrep`、`procps`；Node.js 22 LTS 解压进 `/usr/local`；最后用 npm 全局安装 `dsh` 和 `openclaw`。
+
+**为什么用 Ubuntu 而不是 Alpine？** 因为 dsh 的原生模块提供的是 **glibc** 预编译产物，
+musl 发行版（比如 Alpine）加载不了。所以客户机选用 Ubuntu 24.04（glibc）。
 
 ---
 
-## 📁 项目结构
+## 三个标签页
+
+| 标签 | 说明 |
+|---|---|
+| **Tools** | 工具仪表盘。每个工具一张卡片（`dsh`、OpenClaw、Ollama、Node.js、Git、Python 3），卡片上显示 `running` / `installed` / `not installed` / `missing`，并提供 **Start**、**Stop**、**Open**。Ollama 因为是可选项，所以有独立的 **Install** 按钮。下拉即可重新检测。顶部汇总卡会显示"N of 6 tools ready inside the app sandbox"。 |
+| **Console** | 客户机内的屏幕终端，上方有一排快捷命令标签（`dsh --version`、`dsh web --port 3080`、`openclaw gateway`、`ollama list`、`node --version`、`python3 --version`）。它是**管道式 shell，不是 PTY**——详见[已知限制](#已知限制)。 |
+| **Settings** | dsh Web UI 端口、OpenClaw 网关端口、Ollama 端口、默认 Ollama 模型、保持唤醒开关，以及 **Repair / re-run installation**（修复 / 重跑安装）。 |
+
+常驻服务（`dsh web`、`openclaw gateway`、`ollama serve`）都从 **Tools** 标签启动：App 会把它们
+作为客户机后台进程拉起来，并保留它们的输出。点 **Open** 会用内置 WebView 打开本地面板
+（dsh 是 `http://127.0.0.1:3080`，OpenClaw 是 `http://127.0.0.1:18789`），带刷新按钮和
+"用外部浏览器打开"按钮。
+
+---
+
+## 为什么必须锁定 targetSdk 28
+
+Android 10（API 29）引入了一项 **W^X 限制**：`targetSdk` ≥ 29 的应用，不能再 `execve`
+自己写进应用数据目录里的文件。
+
+而这个 App 的全部意义，恰恰就是执行 PRoot 和一套由它自己解压出来的 Linux 根文件系统——
+这条限制会让它彻底跑不起来。因此构建时固定：
+
+- `minSdk = 24`
+- `targetSdk = 28`
+
+Termux 出于完全相同的原因也把 `targetSdk` 压在低位。代价就是这个应用无法上架 Google Play，
+只能通过 GitHub Releases 侧载。
+
+---
+
+## 仓库结构
 
 ```
 termux-dsh-allinone/
-├── flutter_app/              # Flutter 主应用
-│   ├── lib/
-│   │   ├── main.dart         # 入口
-│   │   ├── models/           # 数据模型
-│   │   ├── services/         # 核心服务
-│   │   ├── pages/            # 页面
-│   │   └── widgets/          # UI 组件
-│   ├── android/              # Android 原生配置
+├── .github/
+│   ├── scripts/patch_android.py   # 给生成出来的 Android 工程打补丁（minSdk/targetSdk/名称/权限）
+│   └── workflows/build.yml        # 唯一的工作流：脚手架 → 打补丁 → 检查 → 构建两个 APK → v* tag 时发 Release
+├── docs/
+│   ├── ARCHITECTURE.md            # PRoot 执行模型、数据流、为什么用 glibc、为什么 targetSdk 28、安全边界
+│   ├── USER_GUIDE.md              # 安装、首次运行、各标签用法、逐工具说明、故障排查
+│   └── BUILD.md                   # 本地构建、CI 脚手架与补丁、新增工具、版本锁定、发布清单
+├── flutter_app/
+│   ├── lib/core/runtime.dart      # PRoot/rootfs 路径、下载器、RuntimeSources 版本号、首次安装流程
+│   ├── lib/models/                # EnvironmentConfig（设置项）、ToolStatus（仪表盘目录）
+│   ├── lib/pages/                 # SetupPage、HomePage、TaskPage、WebDashboardPage
+│   ├── lib/services/              # EnvironmentService（探测/启停）、TerminalService（Console 的 shell）
+│   ├── lib/views/                 # DashboardView、ConsoleView、SettingsView
+│   ├── lib/widgets/               # ToolCard、StatusCard
+│   ├── test/widget_test.dart      # 组件/单元测试
 │   └── pubspec.yaml
-├── bootstrap/                # Custom Termux Bootstrap
-│   ├── scripts/
-│   │   ├── make-bootstrap.sh # 构建脚本
-│   │   └── packages.txt      # 预装包列表
-│   └── out/                  # 输出目录
-├── scripts/                  # 环境初始化脚本
-│   ├── setup-all.sh          # 一键全部配置
-│   ├── setup-dsh.sh          # dsh 配置
-│   ├── setup-openclaw.sh     # openclaw 配置
-│   ├── setup-ollama.sh       # ollama 配置
-│   └── install.sh            # Termux 安装入口
-├── docs/                     # 文档
-│   ├── ARCHITECTURE.md       # 架构设计
-│   ├── USER_GUIDE.md         # 用户指南
-│   └── BUILD.md              # 构建指南
-├── .github/workflows/        # CI/CD
-│   └── build.yml
-└── LICENSE
+├── LICENSE
+├── README.md
+└── README.zh-CN.md
 ```
 
----
+仓库里**刻意不提交 `android/` 目录**：CI 会先跑 `flutter create` 生成一份与当前 Flutter 版本
+匹配的 Android 工程，再打补丁。详见 [docs/BUILD.md](docs/BUILD.md)。
 
-## 🔧 CI/CD 自动化
-
-GitHub Actions 自动化流程：
-
-| 触发条件 | 动作 |
-|----------|------|
-| Push to main | 代码检查、单元测试 |
-| Push tag `v*` | 构建 APK/AAB + 多架构 Bootstrap + 创建 Release |
-| Pull Request | 代码检查、测试 |
-
-查看 [构建指南](docs/BUILD.md) 了解详细配置。
+Flutter 依赖：`shared_preferences`、`path_provider`、`webview_flutter`、`url_launcher`、`archive`。
 
 ---
 
-## 🤝 贡献指南
+## 已知限制
 
-欢迎提交 Issue 和 PR！
+装之前请务必读完。这些是设计上的取舍，不是待修的临时 bug。
 
-1. Fork 仓库
-2. 创建特性分支: `git checkout -b feature/amazing-feature`
-3. 提交更改: `git commit -m 'Add amazing feature'`
-4. 推送分支: `git push origin feature/amazing-feature`
-5. 创建 Pull Request
+- **运行时尚未在真机上验证。** CI 能把 APK 构建出来，但完整的首次运行流程还没有人在真实设备上跑通。
+- **Console 是管道式 shell，不是 PTY。** 普通命令没问题；全屏 curses 程序（`vi`、`nano`、
+  `htop`、`top`）不行。`dsh web` 和 `openclaw gateway` 请从 **Tools** 标签以后台服务方式启动，
+  不要在 Console 提示符里直接敲。
+- **无法上架 Google Play。** `targetSdk = 28` 是这个方案的前提，所以只能从 GitHub Releases 侧载。
+- **Ollama 要下约 1.5 GB**，而且是在客户机内部用 `tar --zstd` 解压的（Android 自带的 `tar`
+  不支持 zstd）；另外模型有可能根本放不进你设备的内存。
+- **一切都在单个 App 的私有存储里。** 卸载 App 就等于删掉整个环境——rootfs、工具链、
+  npm 全局包、已下载模型全都没了。同时客户机没有共享存储的挂载点，所以它看不到 `/sdcard`。
+- **不支持 32 位 ARM**，只支持 arm64 和 x86_64。
+- **客户机里的 root 只是 PRoot 意义上的 root。** `-0` 让客户机看到 uid 0，但它拿不到任何超出
+  App 自身 Android 沙箱的权限。
 
-### 代码规范
-- 运行 `flutter analyze` 确保无错误
-- 运行 `dart format lib/` 格式化代码
-- 编写测试覆盖新功能
-
----
-
-## 📄 许可证
-
-MIT License - 详见 [LICENSE](LICENSE)
+更多细节（包括安全边界）见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ---
 
-## 🔗 相关项目
+## 文档
 
-- [DeepSeek Harness (dsh)](https://github.com/deepseek-ai/deepseek-harness) - AI 编码助手
-- [OpenClaw](https://github.com/anthropics/openclaw) - AI Gateway
-- [Ollama](https://ollama.ai/) - 本地 LLM 推理
-- [Termux](https://termux.dev/) - Android 终端模拟器
-- [dsh-termux](https://github.com/ErEbusE/dsh-termux) - Termux 上的 dsh 运行时
-- [openclaw-termux](https://github.com/mithun50/openclaw-termux) - Flutter + OpenClaw 集成
+- [docs/USER_GUIDE.md](docs/USER_GUIDE.md) —— 安装、首次运行、每个标签页、逐工具用法、故障排查
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) —— 组件图、首次运行数据流、PRoot 执行模型
+- [docs/BUILD.md](docs/BUILD.md) —— 本地构建、CI 如何生成并打补丁、如何新增工具、发布清单
+- [README.md](README.md) —— English
 
 ---
 
-## 🙏 致谢
+## 许可证
 
-感谢所有上游项目的贡献者，以及 Android 开发者社区的支持。
-
----
-
-<p align="center">
-  Made with ❤️ for Android developers<br>
-  <sub>如果这个项目对你有帮助，请给个 ⭐ Star 支持一下！</sub>
-</p>
+MIT，详见 [LICENSE](LICENSE)。

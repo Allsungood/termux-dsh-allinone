@@ -64,7 +64,6 @@ class RuntimeSources {
   static const String prootBase =
       'https://github.com/ahmed-alnassif/proot/releases/download/$prootVersion';
 
-  static const String ubuntuVersion = '24.04.5';
   static const String ubuntuBase =
       'https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release';
 
@@ -294,8 +293,6 @@ class RuntimeBootstrap {
 
   /// Overall weight of each phase, used to build a single progress bar.
   static const List<double> _weights = [0.05, 0.15, 0.30, 0.20, 0.20, 0.10];
-
-  double _completed = 0;
 
   void _phase(int index, double fraction, String label) {
     var total = 0.0;

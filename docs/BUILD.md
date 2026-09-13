@@ -1,430 +1,437 @@
-# 构建指南
+# Build Guide
 
-本文档详细说明如何从源码构建 Termux All-in-One 的所有组件。
+How to build Termux All-in-One locally, how CI scaffolds and patches the Android project, how to add
+a dependency or a whole new tool, how to move the pinned runtime versions, and what to check before a
+release.
 
----
+- [Prerequisites](#prerequisites)
+- [Build locally](#build-locally)
+- [Why the Android project is generated, not committed](#why-the-android-project-is-generated-not-committed)
+- [What patch_android.py does](#what-patch_androidpy-does)
+- [The CI workflow](#the-ci-workflow)
+- [Pinned runtime versions](#pinned-runtime-versions)
+- [Adding a Flutter dependency](#adding-a-flutter-dependency)
+- [Adding a new tool](#adding-a-new-tool)
+- [Signing](#signing)
+- [Release checklist](#release-checklist)
+- [Build troubleshooting](#build-troubleshooting)
 
-## 环境要求
-
-### Flutter App 构建环境
-| 组件 | 版本要求 |
-|------|----------|
-| Flutter SDK | 3.24.3+ (stable channel) |
-| Dart SDK | 3.5.0+ (随 Flutter) |
-| Android SDK | API 35 (Android 15) |
-| Java/JDK | 17 (Temurin/OpenJDK) |
-| Gradle | 8.2+ (随 Android Gradle Plugin) |
-| Kotlin | 1.9.22+ |
-
-### Bootstrap 构建环境
-| 组件 | 版本要求 |
-|------|----------|
-| 操作系统 | Linux (推荐 Ubuntu 22.04+ / Debian 12+) |
-| 架构 | aarch64 (arm64) - 必须在 arm64 上构建 |
-| proot | 5.3.0+ |
-| apk (Alpine) | 2.14+ |
-| zip/unzip | 任意版本 |
-| curl | 任意版本 |
+> **Note.** This document describes the build. It does **not** claim the resulting APK has been
+> verified on a device — it has not. Verify on hardware before you announce a release.
 
 ---
 
-## 快速开始
+## Prerequisites
 
-### 1. 克隆仓库
+| Component | Version | Why |
+|---|---|---|
+| Flutter SDK | stable channel | CI uses `subosito/flutter-action@v2` with `channel: stable` and `cache: true`. |
+| Dart SDK | `>=3.5.0 <4.0.0` | Constraint in `flutter_app/pubspec.yaml`. |
+| JDK | 17 | CI sets `JAVA_VERSION: '17'` (Temurin). |
+| Android SDK | whatever your Flutter version wants | Run `flutter doctor` and accept the licences. There is no committed Android project, so `compileSdk` follows your Flutter version. |
+| Python 3 | any 3.x | `patch_android.py` is stdlib-only (`pathlib`, `re`, `sys`). |
+| git | any | To clone the repository. |
+
+No Linux, no `proot`, no `apk`, no QEMU and no cross-compilation are needed: **the Linux runtime is
+downloaded on the device at first run, not built here.** The APK contains only Dart code.
+
 ```bash
-git clone https://github.com/yourname/termux-dsh-allinone.git
+git clone https://github.com/Allsungood/termux-dsh-allinone.git
 cd termux-dsh-allinone
 ```
 
-### 2. 构建 Flutter APK (任意平台)
+---
+
+## Build locally
+
+### 1. Scaffold the Android platform (exactly as CI does)
+
+The repository has no `android/` directory, so there is nothing to build until you generate one.
+Generate it in a temp directory and copy only the `android` folder in — that keeps `--org` and
+`--project-name` correct instead of letting `flutter create` infer them from the folder name:
+
 ```bash
 cd flutter_app
 
-# 安装依赖
+flutter create \
+  --platforms=android \
+  --org com.allsungood \
+  --project-name termux_dsh_allinone \
+  "$TMPDIR/scaffold"
+
+rm -rf android
+cp -r "$TMPDIR/scaffold/android" android
+```
+
+On Windows PowerShell:
+
+```powershell
+cd flutter_app
+flutter create --platforms=android --org com.allsungood `
+  --project-name termux_dsh_allinone "$env:TEMP\scaffold"
+Remove-Item -Recurse -Force android -ErrorAction SilentlyContinue
+Copy-Item -Recurse "$env:TEMP\scaffold\android" android
+```
+
+This yields `applicationId` and `namespace` `com.allsungood.termux_dsh_allinone`. It also produces the
+binary Gradle wrapper, which is why it cannot be replaced by a hand-written file.
+
+### 2. Patch it
+
+```bash
+python3 .github/scripts/patch_android.py
+```
+
+(On Windows: `python .github\scripts\patch_android.py`, run from the repository root.)
+
+### 3. Resolve, check, test, build
+
+```bash
+cd flutter_app
 flutter pub get
-
-# 代码生成 (如有 json_serializable 等)
-dart run build_runner build --delete-conflicting-outputs
-
-# 构建 Release APK (arm64)
-flutter build apk --release --target-platform android-arm64
-
-# 构建 Release AAB (Play Store)
-flutter build appbundle --release
-
-# 输出位置:
-# build/app/outputs/flutter-apk/app-release.apk
-# build/app/outputs/bundle/release/app-release.aab
-```
-
-### 3. 构建 Custom Bootstrap (必须在 Linux arm64 上)
-
-#### 选项 A: GitHub Actions (推荐，免费 arm64 runner)
-直接推送 tag 触发 CI，自动构建多架构 bootstrap。
-
-#### 选项 B: 本地 arm64 机器 (树莓派 4/5, ARM 云服务器, Apple Silicon Mac 通过 UTM)
-```bash
-cd bootstrap/scripts
-
-# 安装依赖
-sudo apt-get update
-sudo apt-get install -y proot zip unzip curl
-
-# 构建 aarch64 (默认)
-bash make-bootstrap.sh
-
-# 构建 32-bit arm
-ARCH=arm bash make-bootstrap.sh
-
-# 构建 x86_64 (模拟器)
-ARCH=x86_64 bash make-bootstrap.sh
-
-# 自定义 bootstrap 源
-BOOTSTRAP_BASE_URL=https://your-mirror.com/termux-bootstrap \
-bash make-bootstrap.sh
-
-# 输出位置:
-# ../out/bootstrap-aarch64.zip
-# ../out/bootstrap-arm.zip
-# ../out/bootstrap-x86_64.zip
-```
-
-#### 选项 C: Docker (x86_64 主机交叉构建)
-```dockerfile
-# Dockerfile.bootstrap
-FROM ubuntu:22.04
-
-RUN apt-get update && apt-get install -y \
-    proot zip unzip curl qemu-user-static \
-    && rm -rf /var/lib/apt/lists/*
-
-WORKDIR /build
-COPY bootstrap/scripts/ ./scripts/
-RUN ARCH=aarch64 bash scripts/make-bootstrap.sh
-
-# 然后 docker build -t bootstrap-builder . && docker run --rm -v $(pwd)/out:/build/out bootstrap-builder
-```
-
----
-
-## 详细构建步骤
-
-### Flutter App 详细配置
-
-#### Android 签名配置 (发布必需)
-创建 `flutter_app/android/key.properties`：
-```properties
-storePassword=your_keystore_password
-keyPassword=your_key_password
-keyAlias=your_key_alias
-storeFile=../release.keystore
-```
-
-在 `flutter_app/android/app/build.gradle` 中添加：
-```gradle
-def keystoreProperties = new Properties()
-def keystorePropertiesFile = rootProject.file('key.properties')
-if (keystorePropertiesFile.exists()) {
-    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
-}
-
-android {
-    ...
-    signingConfigs {
-        release {
-            keyAlias keystoreProperties['keyAlias']
-            keyPassword keystoreProperties['keyPassword']
-            storeFile file(keystoreProperties['storeFile'])
-            storePassword keystoreProperties['storePassword']
-        }
-    }
-    buildTypes {
-        release {
-            signingConfig signingConfigs.release
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-    }
-}
-```
-
-#### 生成签名密钥
-```bash
-keytool -genkey -v \
-  -keystore flutter_app/release.keystore \
-  -alias termux-allinone \
-  -keyalg RSA \
-  -keysize 2048 \
-  -validity 10000
-```
-
-#### Flutter 图标与启动画面
-```bash
-# 安装 flutter_launcher_icons
-flutter pub add --dev flutter_launcher_icons
-
-# 配置 pubspec.yaml
-flutter_icons:
-  android: true
-  ios: true
-  image_path: "assets/icons/app_icon.png"
-  adaptive_icon_background: "assets/icons/adaptive_background.png"
-  adaptive_icon_foreground: "assets/icons/adaptive_foreground.png"
-
-# 生成
-dart run flutter_launcher_icons
-```
-
-### Bootstrap 详细构建流程
-
-#### make-bootstrap.sh 内部原理
-```bash
-# 1. 下载官方 bootstrap
-curl -fL https://github.com/termux/termux-app/releases/download/bootstrap-20240907/bootstrap-aarch64.zip
-
-# 2. 解压到工作目录
-unzip -q bootstrap.zip -d rootfs
-
-# 3. 进入 proot 环境安装包
-proot \
-  --rootfs=rootfs \
-  --root-id \
-  --kill-on-exit \
-  --bind=/proc:/proc \
-  --bind=/sys:/sys \
-  --bind=/dev:/dev \
-  --link2symlink \
-  -b install-packages.sh:/install-packages.sh \
-  -b packages.txt:/packages.txt \
-  -w /data/data/com.termux/files/usr \
-  /data/data/com.termux/files/usr/bin/bash /install-packages.sh
-
-# 4. 打包
-cd rootfs && zip -qr ../out/bootstrap-aarch64.zip .
-```
-
-#### 自定义包版本锁定
-在 `packages.txt` 中指定版本：
-```text
-nodejs-lts:24.18.0
-python3:3.12.3
-git:2.45.1
-```
-
-查看可用版本：
-```bash
-# 在 proot 环境中
-apk search nodejs-lts
-apk policy nodejs-lts
-```
-
----
-
-## CI/CD 自动化
-
-### GitHub Actions 工作流
-
-项目包含 `.github/workflows/build.yml`，支持：
-
-| 触发条件 | 动作 |
-|----------|------|
-| Push to main | 运行测试、代码检查 |
-| Push tag `v*` | 构建 APK/AAB + 多架构 Bootstrap + 创建 Release |
-| Pull Request | 运行测试、代码检查 |
-| 手动触发 | 手动构建 |
-
-### 本地模拟 CI
-```bash
-# 运行所有检查
-cd flutter_app
-flutter analyze
-dart format --output=none --set-exit-if-changed lib/
+flutter analyze --no-fatal-infos --no-fatal-warnings
 flutter test
-
-# 构建验证
 flutter build apk --release --target-platform android-arm64
 ```
 
----
+Output: `flutter_app/build/app/outputs/flutter-apk/app-release.apk`.
 
-## 多架构支持
+For a 64-bit x86 device or emulator, repeat with `--target-platform android-x64`.
 
-### 支持的架构
-| 架构 | Android ABI | 用途 |
-|------|-------------|------|
-| aarch64 | arm64-v8a | 现代手机 (默认) |
-| arm | armeabi-v7a | 旧设备 (2019年前) |
-| x86_64 | x86_64 | 模拟器、部分平板 |
+### 4. Install it on a device
 
-### 构建所有架构
 ```bash
-# 本地构建 (需要对应架构机器或 qemu-user-static)
-for arch in aarch64 arm x86_64; do
-    ARCH=$arch bash bootstrap/scripts/make-bootstrap.sh
-done
+adb install -r build/app/outputs/flutter-apk/app-release.apk
 ```
 
-### Flutter 多架构 APK
-```bash
-# 单个 APK 包含多架构 (体积较大)
-flutter build apk --release
-
-# 分架构 APK (推荐，体积小)
-flutter build apk --release --target-platform android-arm64
-flutter build apk --release --target-platform android-arm
-flutter build apk --release --target-platform android-x64
-```
+Or copy the APK to the device and tap it. First launch goes straight to the setup screen because the
+`bootstrap.complete` marker does not exist yet.
 
 ---
 
-## 故障排查
+## Why the Android project is generated, not committed
 
-### Flutter 常见问题
+Every CI run regenerates `flutter_app/android` from scratch:
 
-**Q: `flutter: command not found`**
-```bash
-# 添加到 PATH
-export PATH="$PATH:`pwd`/flutter/bin"
-# 或使用 FVM
-fvm use 3.24.3
+```
+flutter create --platforms=android --org com.allsungood \
+  --project-name termux_dsh_allinone "$RUNNER_TEMP/scaffold"
+rm -rf android && cp -r "$RUNNER_TEMP/scaffold/android" android
 ```
 
-**Q: Gradle 内存不足**
+Reasons:
+
+- The generated project always matches the installed Flutter version — Gradle plugin versions,
+  `compileSdk`, and the **binary Gradle wrapper JAR**, which cannot be reviewed as a text diff.
+- There is no drift to maintain: nothing in the app needs custom Kotlin, custom resources or an
+  `AndroidManifest` of its own beyond two pins and a handful of flags.
+- The only Android-specific requirements are therefore expressed as a **diff applied to the
+  generated output**, in `.github/scripts/patch_android.py`, which is reviewable in one screen.
+
+The trade-off: you cannot hand-edit `flutter_app/android` and expect it to survive. Any Gradle or
+manifest change belongs in `patch_android.py`.
+
+---
+
+## What `patch_android.py` does
+
+It resolves the repository root as `parents[2]` of the script file and edits
+`flutter_app/android`, failing the build (with a `::error::` annotation and exit code 1) if any
+assumption does not hold.
+
+### 1. `app/build.gradle.kts` or `app/build.gradle`
+
+| Substitution | Value |
+|---|---|
+| `flutter.minSdkVersion` | `24` |
+| `flutter.targetSdkVersion` | `28` |
+
+Both regexes must match **exactly once**, otherwise the script fails. That is intentional: if
+Flutter's template changes shape, you want a loud failure, not a silently mis-pinned APK.
+
+**Why these pins exist.** Android 10 (API 29) introduced a W^X restriction: an app with
+`targetSdk >= 29` may not `execve` a file it wrote into its own data directory. This app's whole
+purpose is executing PRoot and a Linux root filesystem that it unpacked into its own data directory,
+so `targetSdk` must stay below 29. Termux pins a low `targetSdk` for the same reason. The consequence
+is that the app is **not distributable on Google Play**; releases are side-loaded. See
+[ARCHITECTURE.md](ARCHITECTURE.md#6-why-minsdk-24-and-targetsdk-28).
+
+### 2. `app/src/main/AndroidManifest.xml`
+
+| Change | Value |
+|---|---|
+| `android:label` | `Termux All-in-One` |
+| `android:usesCleartextTraffic` | `true` — added if absent, before `<application>` |
+| Permissions | Any of the seven below that are missing are inserted before `<application>` |
+
+```text
+android.permission.INTERNET
+android.permission.ACCESS_NETWORK_STATE
+android.permission.WAKE_LOCK
+android.permission.FOREGROUND_SERVICE
+android.permission.POST_NOTIFICATIONS
+android.permission.READ_EXTERNAL_STORAGE
+android.permission.WRITE_EXTERNAL_STORAGE
+```
+
+Cleartext HTTP is required because the dashboards are served on `http://127.0.0.1:<port>`, and
+Android 9+ blocks cleartext by default. Note that the flag is app-wide, not loopback-only — see the
+security notes in [ARCHITECTURE.md](ARCHITECTURE.md#7-security-posture).
+
+If the script reports `was not modified`, the generated project already had every change (unlikely)
+or a regex silently matched nothing — read the failure message, it names the file.
+
+---
+
+## The CI workflow
+
+There is exactly **one** workflow: `.github/workflows/build.yml` (there is no separate test
+workflow; checks run inside it).
+
+| Trigger | Effect |
+|---|---|
+| `push` to `master` / `main` | Build both APKs, upload them as artifacts. No release. |
+| `push` of a `v*` tag | Same, plus attaching both APKs to a GitHub Release. |
+| `pull_request` targeting `master` / `main` | Same as a branch push. |
+| `workflow_dispatch` | Manual run. |
+
+Single job `build-apk` on `ubuntu-latest`, `timeout-minutes: 45`, `permissions: contents: write`.
+
+Steps, in order:
+
+1. `actions/checkout@v4`
+2. `actions/setup-java@v4` — Temurin, Java 17
+3. `subosito/flutter-action@v2` — stable channel, cached
+4. **Scaffold the Android platform** (`flutter create` into `$RUNNER_TEMP/scaffold`, copy `android`)
+5. **Patch the Android project** (`python3 .github/scripts/patch_android.py`)
+6. `flutter pub get`
+7. `flutter analyze --no-fatal-infos --no-fatal-warnings`
+8. `flutter test`
+9. `flutter build apk --release --target-platform android-arm64` → staged as `termux-allinone-arm64.apk`
+10. `flutter build apk --release --target-platform android-x64` → staged as `termux-allinone-x86_64.apk`
+11. `actions/upload-artifact@v4` — artifact name `termux-allinone-apks`, `if-no-files-found: error`
+12. `softprops/action-gh-release@v2` — only when `github.ref` starts with `refs/tags/v`;
+    `generate_release_notes: true`, `fail_on_unmatched_files: true`
+
+Release asset names are exactly:
+
+```
+termux-allinone-arm64.apk
+termux-allinone-x86_64.apk
+```
+
+Keep those names stable — the READMEs and the user guide tell people to download them by name.
+
+To emulate CI locally, run steps 4–10 by hand as shown in [Build locally](#build-locally).
+
+---
+
+## Pinned runtime versions
+
+**All upstream versions live in one place: `RuntimeSources` in
+[`flutter_app/lib/core/runtime.dart`](../flutter_app/lib/core/runtime.dart)**, together with the
+per-architecture asset names in the `DeviceArch` enum in the same file.
+
+| Constant / getter | Current value | Drives |
+|---|---|---|
+| `RuntimeSources.prootVersion` | `v26.08.25-7266fb3` | `prootBase` → `https://github.com/ahmed-alnassif/proot/releases/download/<version>/` |
+| `DeviceArch.prootAsset` | `proot-aarch64.zip` / `proot-x86_64.zip` | The PRoot download and the extracted `proot` + `loader` |
+| `RuntimeSources.ubuntuVersion` | `24.04.5` | **Currently unused** — the Ubuntu version is baked into `ubuntuBase` (URL path `24.04`) and into the asset filename below |
+| `RuntimeSources.ubuntuBase` | `https://cdimage.ubuntu.com/ubuntu-base/releases/24.04/release` | Rootfs download base |
+| `DeviceArch.ubuntuAsset` | `ubuntu-base-24.04.5-base-arm64.tar.gz` / `…-amd64.tar.gz` | Rootfs download and extraction |
+| `RuntimeSources.nodeVersion` | `22.11.0` | `nodeBase` → `https://nodejs.org/dist/v<version>/`, the tarball name, the setup log and the `bootstrap.complete` marker |
+| `DeviceArch.nodeDir` | `node-v22.11.0-linux-arm64` / `…-x64` | Node tarball name and the in-guest `tar -xJf` |
+| `RuntimeSources.ollamaVersion` | `v0.34.0` | `ollamaUrl` → `https://github.com/ollama/ollama/releases/download/<version>/` |
+| `DeviceArch.ollamaAsset` | `ollama-linux-arm64.tar.zst` / `ollama-linux-amd64.tar.zst` | Optional Ollama download and in-guest `tar --zstd` |
+
+Also derived from the code rather than from a constant: `DeviceArch.detect()` parses `uname -m` and
+accepts only `aarch64`/`arm64` and `x86_64`/`amd64`; the apt package list is a literal string in
+phase 2 of `RuntimeBootstrap.run()`; and the npm packages are `@deepseek-ai/dsh openclaw`.
+
+### How to change a pinned version
+
+1. Edit the constant(s) **and** every place the version string is duplicated — for Ubuntu that means
+   `ubuntuVersion` (cosmetic), `ubuntuBase` (URL) *and* `DeviceArch.ubuntuAsset` (filename); for
+   Node it means `nodeVersion` and `DeviceArch.nodeDir`.
+2. Confirm the asset actually exists with the new name (the downloader throws
+   `HTTP <code> while fetching <url>` on anything that is not 200).
+3. Update the download table in [README.md](../README.md) and
+   [README.zh-CN.md](../README.zh-CN.md) with the new version, file names and sizes.
+4. Re-run `flutter analyze`, `flutter test` and a local build.
+
+### Cached-archive gotchas (read before you ship a bump)
+
+The installer only downloads when the destination file is **absent**, and it never deletes the
+archives afterwards. Combined with the idempotency checks, that means some bumps do not reach an
+existing install:
+
+| Bumped | Download filename | Reaches an existing install? |
+|---|---|---|
+| `nodeVersion` | version is in the filename | Yes — new filename → re-download, and Node is re-extracted on every setup run. |
+| `ubuntuVersion` | version is in the filename | **No.** The tarball is re-downloaded under the new name, but extraction is skipped while `rootfs/etc/os-release` exists. Requires clearing app data or deleting the rootfs. |
+| `prootVersion` | **not** in the filename (`proot-<arch>.zip`) | **No.** The cached zip is reused, so the old PRoot stays. Delete `downloads/proot-<arch>.zip` or clear app data. |
+| `ollamaVersion` | **not** in the filename (`ollama-linux-<arch>.tar.zst`) | **No**, for the same reason — the cached `.tar.zst` is reused. |
+
+Practical rule: when you bump `prootVersion` or `ollamaVersion`, change the *local* filename pattern
+in `DeviceArch` as well (for example `proot-aarch64-v26.08.25.zip`), or accept that testers must clear
+app data. The full clean-install path for a user is always the same: Android app settings → Clear
+data, then relaunch to get the first-run screen again.
+
+---
+
+## Adding a Flutter dependency
+
 ```bash
-# flutter_app/android/gradle.properties
+cd flutter_app
+flutter pub add <package>
+```
+
+Commit the updated `pubspec.yaml` and `pubspec.lock`. CI runs `flutter pub get` on the committed
+pubspec, so nothing else is required — no Android-side change, because the Android project is
+regenerated on every build.
+
+Current dependencies: `shared_preferences`, `path_provider`, `webview_flutter`, `url_launcher`,
+`archive` (plus `cupertino_icons` and the dev dependencies `flutter_test`, `flutter_lints`).
+
+Lint configuration lives in `flutter_app/analysis_options.yaml` (`package:flutter_lints/flutter.yaml`
+plus `prefer_const_constructors`, `prefer_const_literals_to_create_immutables`, `avoid_print: false`).
+
+---
+
+## Adding a new tool
+
+There is no bootstrap recipe and no package list file any more — a tool is "something installed into
+the guest, then surfaced on the dashboard". Four touch points:
+
+**1. Install it inside the guest** — `flutter_app/lib/core/runtime.dart`.
+
+- A distribution package: append it to the `apt-get install -y -qq --no-install-recommends …` list in
+  phase 2 of `RuntimeBootstrap.run()`.
+- A standalone tarball: follow the Node.js phase — put the version in `RuntimeSources`, add the
+  per-architecture asset name to `DeviceArch`, download into `paths.downloads`, and extract inside the
+  guest with an absolute path or via `/host-downloads/...`.
+- Something heavy or optional: follow `installOllama()` — a separate method on `RuntimeBootstrap`,
+  surfaced through `EnvironmentService` and run on a `TaskPage` so the user sees real log output.
+
+**2. Teach the probe about it** — `flutter_app/lib/services/environment_service.dart`.
+`EnvironmentService.probe()` answers "what is installed?" with one PRoot invocation that loops over
+
+```sh
+for t in node npm git python3 dsh openclaw ollama; do …
+```
+
+Add your command name to that list, otherwise the tool will always show as `missing`.
+
+**3. Add it to the dashboard catalogue** — `flutter_app/lib/models/tool_status.dart`,
+`ToolStatus.catalog()`. Fields: `id`, `name`, `description`, `icon`, and optionally
+`dashboardUrl` (opens in the in-app WebView), `startCommand` (gives the card Start/Stop buttons) and
+`optional: true` (gives it an **Install** button instead of Start). The summary card counts
+`catalog().length`, so the "N of 6 tools ready" text updates itself.
+
+**4. Wire the optional install, if any** — `flutter_app/lib/views/dashboard_view.dart` maps the
+Ollama card's install action to a `TaskPage`. Add a branch for your tool the same way.
+
+Then:
+
+```bash
+cd flutter_app
+flutter analyze --no-fatal-infos --no-fatal-warnings
+flutter test
+```
+
+Note that `flutter_app/test/widget_test.dart` asserts that the catalogue still contains
+`dsh`, `openclaw`, `ollama`, `node`, `git` and `python3`. Adding tools is fine; removing or renaming
+one requires updating that test.
+
+---
+
+## Signing
+
+The workflow does **not** add a `key.properties` or a release keystore, and the repository contains
+neither (`flutter_app/android/key.properties`, `flutter_app/android/release.keystore` and
+`*.apk`/`*.aab` are in `.gitignore`). The APKs CI produces are therefore signed the way the
+Flutter-generated project signs `--release` builds by default, which in current Flutter templates
+falls back to the debug keystore. **Verify the signature before you distribute a build.**
+
+To ship a properly signed APK:
+
+1. Generate a keystore (keep it out of the repository):
+
+   ```bash
+   keytool -genkey -v -keystore release.keystore -alias termux-allinone \
+     -keyalg RSA -keysize 2048 -validity 10000
+   ```
+
+2. Add the keystore and its passwords as repository secrets (base64-encode the keystore, then decode
+   it in a workflow step).
+3. **Inject the signing config in `patch_android.py`**, not by editing `flutter_app/android` by hand —
+   the Android project is deleted and regenerated on every CI run. Read
+   `android/key.properties` in a new patch function and rewrite the generated `signingConfigs` /
+   `buildTypes.release` block, asserting that each substitution matched.
+
+Because the app cannot be published on Google Play (`targetSdk 28`), signing only matters for
+side-loading authenticity, not for store compliance.
+
+---
+
+## Release checklist
+
+- [ ] Bump `version:` in `flutter_app/pubspec.yaml` (currently `1.0.2+3`).
+- [ ] If a runtime version changed, update `RuntimeSources` / `DeviceArch` in
+      `flutter_app/lib/core/runtime.dart` and handle the cached-archive gotchas above.
+- [ ] Update the download table in `README.md` and `README.zh-CN.md` if versions, filenames or sizes
+      changed.
+- [ ] `cd flutter_app && flutter pub get`
+- [ ] `flutter analyze --no-fatal-infos --no-fatal-warnings` — clean.
+- [ ] `flutter test` — green.
+- [ ] Local release build succeeds for both `android-arm64` and `android-x64`.
+- [ ] Scaffold + patch step still succeeds (i.e. `patch_android.py` did not trip an assertion).
+- [ ] **Install the APK on a physical arm64 device and walk the first run, the Tools tab, the Console
+      and `dsh web` end to end.** This is the step that has not yet been done for any release — do it
+      before announcing, or keep the "not verified on a device" note in the READMEs.
+- [ ] Tag and push: `git tag v1.0.2 && git push origin v1.0.2`.
+- [ ] Confirm the GitHub Release contains exactly `termux-allinone-arm64.apk` and
+      `termux-allinone-x86_64.apk`.
+- [ ] Re-check that the READMEs still state the honest verification status and limitations.
+
+---
+
+## Build troubleshooting
+
+**`flutter build apk` fails: "No Android SDK found" / missing platform**
+Run `flutter doctor -v` and accept the licences (`flutter doctor --android-licenses`). The generated
+project targets whatever platform your Flutter version expects.
+
+**`android/` is missing, or the build fails with "no app/build.gradle(.kts) found"**
+You skipped the scaffold step. CI always scaffolds before patching; do the same locally
+([Build locally](#build-locally)). Do not run `flutter create` in place inside `flutter_app` —
+it would infer the wrong organisation and project name.
+
+**`patch_android.py` fails with `expected exactly one minSdk reference …, found 0`**
+Flutter's generated Gradle file changed shape. Inspect
+`flutter_app/android/app/build.gradle(.kts)` and update the regexes in
+`.github/scripts/patch_android.py`. The assertion is there precisely so this is noticed.
+
+**Gradle runs out of memory**
+Add to `flutter_app/android/gradle.properties` (regenerated each build — for CI, inject it from
+`patch_android.py`):
+
+```properties
 org.gradle.jvmargs=-Xmx4096m -Dkotlin.daemon.jvm.options="-Xmx2048m"
 ```
 
-**Q: 签名错误**
-```bash
-# 清理并重新构建
-flutter clean
-flutter pub get
-flutter build apk --release
-```
+**`flutter analyze` fails on lints**
+The workflow passes `--no-fatal-infos --no-fatal-warnings`; for a stricter local run drop those flags
+and fix what it reports.
 
-**Q: 依赖冲突**
-```bash
-# 查看依赖树
-flutter pub deps
+**`flutter test` fails on the catalogue test**
+`widget_test.dart` asserts the tool ids `dsh`, `openclaw`, `ollama`, `node`, `git`, `python3` exist.
+Update the test alongside `ToolStatus.catalog()`.
 
-# 强制版本
-dependency_overrides:
-  some_package: ^1.2.3
-```
+**The app installs but the first-run screen fails at a download**
+That is a runtime issue, not a build issue — see the troubleshooting section of
+[USER_GUIDE.md](USER_GUIDE.md#downloads-fail-or-stall).
 
-### Bootstrap 常见问题
-
-**Q: `proot: command not found`**
-```bash
-sudo apt-get install proot
-# 或
-# 下载静态编译版本
-curl -fL https://github.com/proot-me/proot-static-build/releases/download/v5.3.0/proot-x86_64 -o /usr/local/bin/proot
-chmod +x /usr/local/bin/proot
-```
-
-**Q: `apk: not found` (在 proot 内)**
-```bash
-# 确保 bootstrap 基础镜像完整
-# 官方 bootstrap 已包含 apk
-# 如果缺失，手动安装 alpine-base
-```
-
-**Q: 网络下载失败**
-```bash
-# 使用国内镜像
-BOOTSTRAP_BASE_URL=https://mirrors.tuna.tsinghua.edu.cn/termux/bootstrap \
-bash make-bootstrap.sh
-
-# 或设置代理
-export HTTP_PROXY=http://proxy:port
-export HTTPS_PROXY=http://proxy:port
-```
-
-**Q: 构建产物过大**
-```bash
-# 清理 apk 缓存
-# make-bootstrap.sh 已包含: apk clean
-
-# 移除文档和 man pages
-# 在 install-packages.sh 中添加:
-# apk add --no-cache --no-docs <packages>
-```
-
----
-
-## 发布清单
-
-发布新版本前检查：
-
-- [ ] 更新 `flutter_app/pubspec.yaml` 版本号
-- [ ] 更新 `bootstrap/scripts/packages.txt` (如有包更新)
-- [ ] 运行完整测试套件 `flutter test`
-- [ ] 代码格式检查 `dart format --set-exit-if-changed lib/`
-- [ ] 静态分析 `flutter analyze` 无错误
-- [ ] 本地构建 APK 验证安装运行
-- [ ] 本地构建 Bootstrap 验证包含所有包
-- [ ] 创建 Git tag: `git tag v1.0.0 && git push origin v1.0.0`
-- [ ] GitHub Actions 自动构建并创建 Release
-- [ ] 验证 Release 页面包含: APK, AAB, bootstrap-*.zip
-- [ ] 更新文档 (CHANGELOG.md 等)
-
----
-
-## 性能优化
-
-### APK 体积优化
-```gradle
-// flutter_app/android/app/build.gradle
-android {
-    buildTypes {
-        release {
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-    }
-    // 移除不需要的架构
-    defaultConfig {
-        ndk {
-            abiFilters 'arm64-v8a' // 只保留 arm64
-        }
-    }
-}
-```
-
-### Bootstrap 体积优化
-```bash
-# 在 install-packages.sh 中
-apk add --no-cache --no-docs <packages>
-# 移除: /usr/share/doc, /usr/share/man, /var/cache/apk/*
-```
-
-### 启动速度优化
-- 使用 Flutter 的 `deferred components` 延迟加载非首页页面
-- Bootstrap 预编译 Node.js 原生模块
-- 启用 Flutter 的 `--split-debug-info` 减少调试符号
-
----
-
-## 跨平台构建矩阵
-
-| 目标平台 | 构建机器 | 交叉编译 | 备注 |
-|----------|----------|----------|------|
-| Android arm64 | Linux arm64 / GitHub Actions | 否 | 原生构建 |
-| Android arm | Linux arm / qemu | 是 | 需要 qemu-user |
-| Android x86_64 | Linux x86_64 | 否 | 原生构建 |
-| iOS | macOS | 否 | 需要 Xcode |
-| Web | 任意 | N/A | `flutter build web` |
-
----
-
-## 资源链接
-
-- [Flutter 官方构建文档](https://docs.flutter.dev/deployment/android)
-- [Termux Bootstrap 官方仓库](https://github.com/termux/termux-app)
-- [proot 文档](https://github.com/proot-me/proot)
-- [GitHub Actions arm64 runners](https://github.com/actions/runner-images)
-- [Android 签名指南](https://developer.android.com/studio/publish/app-signing)
+**`adb install` refuses to overwrite an existing install**
+The APK is signed differently from the installed one (for example you installed a CI build earlier).
+Uninstall first — note that this deletes the whole runtime, including downloads and models.

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'environment_config.dart';
+
 /// A tool that lives inside the guest root filesystem.
 class ToolStatus {
   const ToolStatus({
@@ -45,22 +47,28 @@ class ToolStatus {
   }
 
   /// The catalogue shown on the dashboard, in display order.
-  static List<ToolStatus> catalog() => const [
+  ///
+  /// Start commands and dashboard URLs are derived from the saved [config], so
+  /// changing a port in Settings actually changes what gets launched.
+  static List<ToolStatus> catalog({
+    EnvironmentConfig config = const EnvironmentConfig(),
+  }) => [
     ToolStatus(
       id: 'dsh',
       name: 'dsh',
       description: 'DeepSeek Harness — AI coding agent with a web UI',
       icon: Icons.terminal,
-      dashboardUrl: 'http://127.0.0.1:3080',
-      startCommand: 'dsh web --port 3080 --host 127.0.0.1',
+      dashboardUrl: 'http://127.0.0.1:${config.dshPort}',
+      startCommand:
+          'dsh web --port ${config.dshPort} --host 127.0.0.1',
     ),
     ToolStatus(
       id: 'openclaw',
       name: 'OpenClaw',
       description: 'AI gateway with device capabilities',
       icon: Icons.hub,
-      dashboardUrl: 'http://127.0.0.1:18789',
-      startCommand: 'openclaw gateway',
+      dashboardUrl: 'http://127.0.0.1:${config.openclawPort}',
+      startCommand: 'openclaw gateway --port ${config.openclawPort}',
     ),
     ToolStatus(
       id: 'ollama',
@@ -68,21 +76,23 @@ class ToolStatus {
       description: 'Local LLM inference (~1.5 GB download)',
       icon: Icons.memory,
       optional: true,
-      startCommand: 'ollama serve',
+      dashboardUrl: 'http://127.0.0.1:${config.ollamaPort}',
+      startCommand:
+          'OLLAMA_HOST=127.0.0.1:${config.ollamaPort} ollama serve',
     ),
-    ToolStatus(
+    const ToolStatus(
       id: 'node',
       name: 'Node.js',
       description: 'JavaScript runtime (v22 LTS)',
       icon: Icons.javascript,
     ),
-    ToolStatus(
+    const ToolStatus(
       id: 'git',
       name: 'Git',
       description: 'Distributed version control',
       icon: Icons.commit,
     ),
-    ToolStatus(
+    const ToolStatus(
       id: 'python3',
       name: 'Python 3',
       description: 'Scripting and build tooling',
