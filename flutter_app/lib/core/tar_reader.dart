@@ -74,23 +74,32 @@ class PaxOverrides {
 
   static const PaxOverrides empty = PaxOverrides();
 
-  /// PAX records look like `LENGTH key=value\n`, where LENGTH counts the whole
-  /// record including itself. Only `path` and `linkpath` matter here: they are
-  /// the two that change how an entry is materialised. Other keys (timestamps,
-  /// ownership) are intentionally dropped rather than half-applied.
+  /// PAX records are `LENGTH key=value\n`, and GNU tar gives *every* line its
+  /// own length prefix (verified against the real Ubuntu base archive, whose
+  /// records look like `30 atime=1788826552.516239391\n29 ctime=...\n`). A
+  /// leading length is therefore stripped when present and tolerated when
+  /// absent, so both layouts parse.
+  ///
+  /// Only `path` and `linkpath` matter here: they are the two keys that change
+  /// how an entry is materialised. Other keys (timestamps, ownership) are
+  /// deliberately dropped rather than half-applied.
   static PaxOverrides parse(String record, PaxOverrides previous) {
     String? path = previous.path;
     String? linkPath = previous.linkPath;
 
-    for (final line in record.split('\n')) {
+    for (final rawLine in record.split('\n')) {
+      var line = rawLine;
       if (line.isEmpty) continue;
-      final space = line.indexOf(' ');
-      if (space < 0) continue;
-      final assignment = line.substring(space + 1);
-      final equals = assignment.indexOf('=');
-      if (equals < 0) continue;
-      final key = assignment.substring(0, equals);
-      final value = assignment.substring(equals + 1);
+
+      final prefix = _lengthPrefix.firstMatch(line);
+      if (prefix != null) {
+        line = line.substring(prefix.end);
+      }
+
+      final equals = line.indexOf('=');
+      if (equals <= 0) continue;
+      final key = line.substring(0, equals);
+      final value = line.substring(equals + 1);
       switch (key) {
         case 'path':
           path = value;
@@ -100,6 +109,8 @@ class PaxOverrides {
     }
     return PaxOverrides(path: path, linkPath: linkPath);
   }
+
+  static final RegExp _lengthPrefix = RegExp(r'^\d+ ');
 }
 
 /// Raised when an archive cannot be understood.

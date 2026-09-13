@@ -93,21 +93,40 @@ Uint8List _header(TarSpec spec, int size) {
   return header;
 }
 
-/// Builds a PAX extended-header record (`LENGTH key=value\n`).
+/// Builds a PAX extended-header payload.
 ///
-/// The real Ubuntu base archive writes one of these before *every* entry, so
-/// the tests must cover that shape rather than only plain ustar.
+/// GNU tar prefixes *every* line with its own length. The real Ubuntu base
+/// archive stores e.g. `30 atime=1788826552.516239391\n29 ctime=...\n`, and
+/// none of its records carry `path`; the builder reproduces that shape.
 String buildPaxRecord(Map<String, String> fields) {
-  final body = StringBuffer();
-  fields.forEach((key, value) => body.write('$key=$value\n'));
-  final payload = body.toString();
+  final out = StringBuffer();
+  fields.forEach((key, value) {
+    final body = '$key=$value\n';
+    var length = body.length + 2;
+    while (true) {
+      final total = '$length '.length + body.length;
+      if (total == length) break;
+      length = total;
+    }
+    out.write('$length $body');
+  });
+  return out.toString();
+}
 
-  var length = payload.length + 2;
-  while (true) {
-    final total = '$length '.length + payload.length;
-    if (total == length) return '$length $payload';
-    length = total;
+/// Recomputes a header block's checksum after the block has been mutated.
+Uint8List resealHeader(Uint8List block) {
+  final copy = Uint8List.fromList(block);
+  for (var i = 148; i < 156; i++) {
+    copy[i] = 0x20;
   }
+  var sum = 0;
+  for (final byte in copy) {
+    sum += byte;
+  }
+  copy.setRange(148, 154, utf8.encode(sum.toRadixString(8).padLeft(6, '0')));
+  copy[154] = 0;
+  copy[155] = 0x20;
+  return copy;
 }
 
 /// A spec plus a PAX header carrying the same name, mirroring how the Ubuntu

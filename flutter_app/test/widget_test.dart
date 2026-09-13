@@ -41,10 +41,10 @@ void main() {
     );
 
     expect(find.text('dsh'), findsOneWidget);
-    expect(find.text('installed'), findsOneWidget);
-    expect(find.text('Start'), findsOneWidget);
+    expect(find.text('已安装'), findsOneWidget);
+    expect(find.text('启动'), findsOneWidget);
 
-    await tester.tap(find.text('Start'));
+    await tester.tap(find.text('启动'));
     expect(started, isTrue);
   });
 
@@ -59,8 +59,8 @@ void main() {
 
     await tester.pumpWidget(_host(ToolCard(tool: tool, running: false)));
 
-    expect(find.text('Install'), findsOneWidget);
-    expect(find.text('not installed'), findsOneWidget);
+    expect(find.text('安装'), findsOneWidget);
+    expect(find.text('未安装'), findsOneWidget);
   });
 
   testWidgets('running tool shows Stop', (tester) async {
@@ -75,8 +75,8 @@ void main() {
 
     await tester.pumpWidget(_host(ToolCard(tool: tool, running: true)));
 
-    expect(find.text('running'), findsOneWidget);
-    expect(find.text('Stop'), findsOneWidget);
+    expect(find.text('运行中'), findsOneWidget);
+    expect(find.text('停止'), findsOneWidget);
   });
 
   testWidgets('StatusCard renders its labels', (tester) async {

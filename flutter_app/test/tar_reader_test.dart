@@ -84,8 +84,11 @@ void main() {
         firstHeader([TarSpec(name: 'old/style', data: 'x')]),
       );
       block[156] = 0;
+      // Mutating the header invalidates its checksum, so reseal it first —
+      // otherwise this would test checksum rejection instead of the type flag.
+      final resealed = resealHeader(block);
 
-      final header = parseTarHeader(block)!;
+      final header = parseTarHeader(resealed)!;
       expect(header.typeFlag, TarType.file);
       expect(header.name, 'old/style');
     });
@@ -98,7 +101,9 @@ void main() {
     test('rejects a corrupt checksum', () {
       final block = firstHeader([TarSpec(name: 'etc/os-release', data: 'x')]);
       final corrupt = Uint8List.fromList(block);
-      corrupt.setRange(148, 154, '000000'.codeUnits);
+      // A wrong but non-zero value: zero explicitly means "unset" and is
+      // tolerated by design.
+      corrupt.setRange(148, 154, '000001'.codeUnits);
 
       expect(
         () => parseTarHeader(corrupt),
@@ -110,6 +115,16 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('accepts a header whose checksum field was left unset', () {
+      final block = Uint8List.fromList(
+        firstHeader([TarSpec(name: 'legacy', data: 'x')]),
+      );
+      block.setRange(148, 156, List<int>.filled(8, 0x20));
+
+      final header = parseTarHeader(block);
+      expect(header?.name, 'legacy');
     });
 
     test('rejects a header that is not a full block', () {
@@ -191,6 +206,18 @@ void main() {
         PaxOverrides.parse('garbage', PaxOverrides.empty).path,
         isNull,
       );
+    });
+
+    test('also accepts records written without a length prefix', () {
+      // Real archives always prefix each line, but tolerating the bare
+      // `key=value\n` form costs nothing and avoids depending on that.
+      final overrides = PaxOverrides.parse(
+        'path=usr/bin/tool\nlinkpath=usr/bin/gunzip\n',
+        PaxOverrides.empty,
+      );
+
+      expect(overrides.path, 'usr/bin/tool');
+      expect(overrides.linkPath, 'usr/bin/gunzip');
     });
   });
 
