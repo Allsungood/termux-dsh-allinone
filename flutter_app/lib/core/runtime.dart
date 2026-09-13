@@ -5,7 +5,6 @@ import 'package:archive/archive.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'rootfs_extractor.dart';
-import 'tar_reader.dart';
 
 /// Progress callback: (0.0-1.0, human readable label)
 typedef ProgressFn = void Function(double value, String label);

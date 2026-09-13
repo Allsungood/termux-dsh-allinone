@@ -13,10 +13,10 @@ import 'tar_test_utils.dart';
 /// never also a directory, which is exactly why the extractor must not create
 /// it as one.
 List<TarSpec> rootfsLikeSpecs() => [
-  TarSpec(name: 'etc', type: '5', mode: 0o755),
-  TarSpec(name: 'etc/alternatives', type: '5', mode: 0o755),
-  TarSpec(name: 'usr', type: '5', mode: 0o755),
-  TarSpec(name: 'usr/bin', type: '5', mode: 0o755),
+  TarSpec(name: 'etc', type: '5', mode: octal(755)),
+  TarSpec(name: 'etc/alternatives', type: '5', mode: octal(755)),
+  TarSpec(name: 'usr', type: '5', mode: octal(755)),
+  TarSpec(name: 'usr/bin', type: '5', mode: octal(755)),
   TarSpec(name: 'bin', type: '2', linkName: 'usr/bin'),
   TarSpec(name: 'lib', type: '2', linkName: 'usr/lib'),
   TarSpec(
@@ -24,15 +24,15 @@ List<TarSpec> rootfsLikeSpecs() => [
     type: '2',
     linkName: '/usr/bin/mawk',
   ),
-  TarSpec(name: 'usr/bin/gunzip', type: '0', mode: 0o755, data: 'GUNZIP'),
+  TarSpec(name: 'usr/bin/gunzip', type: '0', mode: octal(755), data: 'GUNZIP'),
   TarSpec(
     name: 'usr/bin/uncompress',
     type: '1',
     linkName: 'usr/bin/gunzip',
   ),
-  TarSpec(name: 'usr/bin/tool', type: '0', mode: 0o755, data: 'EXEC'),
-  TarSpec(name: 'etc/config', type: '0', mode: 0o644, data: 'CONF'),
-  TarSpec(name: 'etc/secret', type: '0', mode: 0o600, data: 'SECRET'),
+  TarSpec(name: 'usr/bin/tool', type: '0', mode: octal(755), data: 'EXEC'),
+  TarSpec(name: 'etc/config', type: '0', mode: octal(644), data: 'CONF'),
+  TarSpec(name: 'etc/secret', type: '0', mode: octal(600), data: 'SECRET'),
 ];
 
 void main() {
@@ -83,14 +83,14 @@ void main() {
       await extractSpecs(rootfsLikeSpecs());
 
       final exec = File('${destination.path}/usr/bin/tool').statSync();
-      expect(exec.mode & 0o111, isNot(0), reason: 'binaries must be executable');
-      expect(exec.mode & 0o777, 0o755);
+      expect(exec.mode & octal(111), isNot(0), reason: 'binaries must be executable');
+      expect(exec.mode & octal(777), octal(755));
 
       final plain = File('${destination.path}/etc/config').statSync();
-      expect(plain.mode & 0o111, 0, reason: 'data files must not be executable');
+      expect(plain.mode & octal(111), 0, reason: 'data files must not be executable');
 
       final restricted = File('${destination.path}/etc/secret').statSync();
-      expect(restricted.mode & 0o777, 0o600);
+      expect(restricted.mode & octal(777), octal(600));
     });
 
     test('restores file contents', () async {
@@ -175,11 +175,11 @@ void main() {
       // The Ubuntu base tarball writes a PAX extended header before every one of
       // its 3413 entries, so this path must work.
       final specs = [
-        ...paxWrapped(TarSpec(name: 'usr', type: '5', mode: 0o755)),
-        ...paxWrapped(TarSpec(name: 'usr/bin', type: '5', mode: 0o755)),
+        ...paxWrapped(TarSpec(name: 'usr', type: '5', mode: octal(755))),
+        ...paxWrapped(TarSpec(name: 'usr/bin', type: '5', mode: octal(755))),
         ...paxWrapped(TarSpec(name: 'bin', type: '2', linkName: 'usr/bin')),
         ...paxWrapped(
-          TarSpec(name: 'usr/bin/gunzip', type: '0', mode: 0o755, data: 'GZ'),
+          TarSpec(name: 'usr/bin/gunzip', type: '0', mode: octal(755), data: 'GZ'),
         ),
       ];
 
@@ -211,7 +211,7 @@ void main() {
     test('applies a PAX linkpath to a hard link', () async {
       final specs = [
         ...paxWrapped(
-          TarSpec(name: 'usr/bin/gunzip', type: '0', mode: 0o755, data: 'GZ'),
+          TarSpec(name: 'usr/bin/gunzip', type: '0', mode: octal(755), data: 'GZ'),
         ),
         ...paxWrapped(
           TarSpec(name: 'usr/bin/uncompress', type: '1'),

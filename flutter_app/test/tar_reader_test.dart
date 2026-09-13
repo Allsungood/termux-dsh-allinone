@@ -14,24 +14,24 @@ void main() {
     test('reads a regular file', () {
       final header = parseTarHeader(
         firstHeader([
-          TarSpec(name: 'usr/bin/tool', type: '0', mode: 0o755, data: 'EXEC'),
+          TarSpec(name: 'usr/bin/tool', type: '0', mode: octal(755), data: 'EXEC'),
         ]),
       )!;
 
       expect(header.name, 'usr/bin/tool');
       expect(header.typeFlag, TarType.file);
-      expect(header.mode, 0o755);
+      expect(header.mode, octal(755));
       expect(header.size, 4);
     });
 
     test('reads a directory', () {
       final header = parseTarHeader(
-        firstHeader([TarSpec(name: 'usr/bin', type: '5', mode: 0o755)]),
+        firstHeader([TarSpec(name: 'usr/bin', type: '5', mode: octal(755))]),
       )!;
 
       expect(header.typeFlag, TarType.directory);
       expect(header.name, 'usr/bin');
-      expect(header.mode, 0o755);
+      expect(header.mode, octal(755));
     });
 
     test('distinguishes a symlink target from a hard link target', () {

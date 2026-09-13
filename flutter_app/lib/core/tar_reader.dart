@@ -4,6 +4,14 @@ import 'dart:typed_data';
 /// Size of a tar block, and of every tar header.
 const int tarBlockSize = 512;
 
+/// Builds permission bits from their conventional octal text.
+///
+/// Permission bits are always written in octal — `chmod 755`, `mode 0644` — but
+/// Dart has no octal literal syntax (`0o755` does not parse), so the code that
+/// deals with them has to spell the base out. Keeping a named helper means the
+/// numbers stay recognisable instead of turning into unexplained decimals.
+int octal(int value) => int.parse('$value', radix: 8);
+
 /// Header type flags, as defined by POSIX.1-1988 and the GNU extensions.
 class TarType {
   const TarType._();

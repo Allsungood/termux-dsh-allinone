@@ -7,7 +7,9 @@ class TarSpec {
   TarSpec({
     required this.name,
     this.type = '0',
-    this.mode = 0o644,
+    // 0644 and 0755 spelled in decimal: Dart has no octal literal syntax, and a
+    // default parameter value must be a compile-time constant.
+    this.mode = 420,
     this.linkName = '',
     this.data = '',
     this.prefix = '',

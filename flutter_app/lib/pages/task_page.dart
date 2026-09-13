@@ -33,7 +33,6 @@ class _TaskPageState extends State<TaskPage> {
 
   double _progress = 0;
   String _label = '正在开始…';
-  bool _running = true;
   bool _done = false;
   String? _error;
 
@@ -69,7 +68,6 @@ class _TaskPageState extends State<TaskPage> {
 
   Future<void> _run() async {
     setState(() {
-      _running = true;
       _done = false;
       _error = null;
       _logs.clear();
@@ -89,7 +87,6 @@ class _TaskPageState extends State<TaskPage> {
       );
       if (!mounted) return;
       setState(() {
-        _running = false;
         _done = true;
         _progress = 1;
         _label = widget.successMessage;
@@ -97,7 +94,6 @@ class _TaskPageState extends State<TaskPage> {
     } catch (error) {
       if (!mounted) return;
       setState(() {
-        _running = false;
         _error = error.toString();
         _label = '失败';
       });

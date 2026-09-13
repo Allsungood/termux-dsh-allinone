@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -46,8 +47,8 @@ class RootfsExtractor {
 
   /// Modes equal to the platform defaults need no `chmod`, which keeps the
   /// number of subprocesses to a handful instead of thousands.
-  static const int _defaultFileMode = 0o644;
-  static const int _defaultDirectoryMode = 0o755;
+  static final int _defaultFileMode = octal(644);
+  static final int _defaultDirectoryMode = octal(755);
 
   /// `chmod` accepts many paths per call; batching avoids ~3400 processes.
   static const int _chmodBatchSize = 200;
@@ -172,16 +173,14 @@ class RootfsExtractor {
 
         switch (parsed.typeFlag) {
           case TarType.paxHeader:
-            final record = await _readBytes(handle, parsed.size, dataOffset);
+            final record = await _readText(handle, parsed.size, dataOffset);
             pax = PaxOverrides.parse(record, pax);
 
           case TarType.gnuLongName:
-            longName = (await _readBytes(handle, parsed.size, dataOffset))
-                .trim();
+            longName = (await _readText(handle, parsed.size, dataOffset)).trim();
 
           case TarType.gnuLongLink:
-            longLink = (await _readBytes(handle, parsed.size, dataOffset))
-                .trim();
+            longLink = (await _readText(handle, parsed.size, dataOffset)).trim();
 
           case TarType.paxGlobalHeader:
             // Archive-wide defaults are intentionally ignored.
@@ -287,12 +286,13 @@ class RootfsExtractor {
     }
   }
 
-  static Future<Uint8List> _readBytes(
+  /// Reads an extension header's payload as text (PAX records, GNU long names).
+  static Future<String> _readText(
     RandomAccessFile handle,
     int size,
     int dataOffset,
   ) async {
-    if (size <= 0) return Uint8List(0);
+    if (size <= 0) return '';
     await handle.setPosition(dataOffset);
     final buffer = Uint8List(size);
     var read = 0;
@@ -303,7 +303,7 @@ class RootfsExtractor {
       }
       read += got;
     }
-    return buffer;
+    return utf8.decode(buffer, allowMalformed: true);
   }
 
   static Future<int> _finishHardLinks(
@@ -363,15 +363,25 @@ class RootfsExtractor {
     }
   }
 
+  /// Creates a hard link.
+  ///
+  /// `dart:io` exposes no hard-link API at all (`File` has no `link` method,
+  /// and `Link.create` makes a symlink), so this shells out to `ln`, which
+  /// Android's toybox provides. Returns `false` when the filesystem refuses —
+  /// Android restricts hard links in app data directories — so the caller can
+  /// fall back to a symlink.
   static Future<bool> _createHardLink(String targetPath, String linkPath) async {
+    if (!await File(targetPath).exists()) return false;
+    await _deleteIfPresent(linkPath);
     try {
-      if (!await File(targetPath).exists()) return false;
-      await _deleteIfPresent(linkPath);
-      await File(targetPath).link(linkPath);
-      return true;
-    } on FileSystemException {
-      return false;
+      final result = await Process.run('ln', [targetPath, linkPath]);
+      if (result.exitCode == 0 && await File(linkPath).exists()) {
+        return true;
+      }
+    } on ProcessException {
+      // No usable `ln` on this system.
     }
+    return false;
   }
 
   static Future<void> _deleteIfPresent(String path) async {
